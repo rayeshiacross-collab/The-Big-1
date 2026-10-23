@@ -9,18 +9,23 @@ from .ledger import _append, storage_lock
 from .local_model import doctor_check
 from . import validators, drive_storage
 from .self_qa import require_self_qa
+from .machine_usage import tracked, recent_runs, usage_path
+import json
 from .safety import confined
 
 def central_now(): return datetime.now(ZoneInfo(TZ))
 def make_run_id(): return central_now().strftime('%Y%m%d-%H%M-central')
+@tracked("doctor")
 def doctor():
     assert_open_stack(); ensure_dirs()
     result = doctor_check(); print('DOCTOR REPORT', result)
     if not result.get('reachable') or not result.get('ok'): raise SystemExit('Local doctor failed; fix before work')
+@tracked("claim")
 def start_lane(lane, content_id):
     doctor()
     return claim(content_id, lane)
 
+@tracked("writing_completion")
 def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *, claim_token=None, drive_verifier=None, self_qa_report=None):
     assert_open_stack()
     if status != 'WRITING_COMPLETE': raise PermissionError('Rendering/release gates require separate reviewed implementations')
@@ -63,12 +68,14 @@ def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *,
 
 def main():
     p = argparse.ArgumentParser(description='Hub writing tools; no publication')
-    p.add_argument('command', choices=['doctor', 'claim', 'abandon'])
+    p.add_argument('command', choices=['doctor', 'claim', 'abandon', 'runs'])
     p.add_argument('--lane', default=''); p.add_argument('--content-id', default=''); p.add_argument('--claim-token', default='')
     args = p.parse_args()
-    if args.command == 'doctor': doctor()
+    if args.command == 'runs':
+        print(json.dumps({'ledger': str(usage_path()), 'runs': recent_runs()}, indent=2))
+    elif args.command == 'doctor': doctor()
     elif args.command == 'claim':
         h = start_lane(args.lane, args.content_id)
         print(h.to_dict()); print('CLAIM_TOKEN=' + h.claim_token)
-    else: abandon_claim(args.content_id, args.lane, args.claim_token)
+    else: tracked('abandon')(abandon_claim)(args.content_id, args.lane, args.claim_token)
 if __name__ == '__main__': main()
