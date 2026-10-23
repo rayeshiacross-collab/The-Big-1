@@ -11,7 +11,7 @@
 | 1 | **Master Research (DC)** | `rebootv2-master-research` | Find, verify, rank, assign today’s subjects |
 | 2 | **Psychology** | `rebootv2-psychology-runner` | Long-form script + 3 Shorts + companion article |
 | 3 | **System Glitch** | `rebootv2-system-glitch-runner` | 25–35s short that reveals one digital contradiction |
-| 4 | **Hypit** | `rebootv2-hypit` | If it goes in, it gets advertised — commercials, thumbs, all socials + Metricool + Zapier |
+| 4 | **Hypit** | `rebootv2-hypit` | If it goes in, it gets advertised — commercials, thumbs, draft distribution packages; no live connector execution |
 | 5 | **Omni** | `rebootv2-omni` | RSS, blogs, newsletters, podcasts (non-YouTube long-form/audio) |
 
 Central hub: **`The-Big-1`** — architecture, open-stack rules, skeleton code, this map.
@@ -69,10 +69,10 @@ Central hub: **`The-Big-1`** — architecture, open-stack rules, skeleton code, 
 
 ---
 
-## Connected distribution (Hypit)
+## Planned distribution packages (Hypit)
 
 Socials: YouTube, Instagram, TikTok, X, Facebook, Threads, LinkedIn, **Pinterest**, **Blogger**, other blogs, RSS  
-Tools: **Metricool**, **Zapier**  
+Potential destinations: **Metricool**, **Zapier**. This hub has no publishing connector, and no connection or approval enforcement in the lane repos is certified here.  
 Config: `rebootv2-hypit/config/socials.yaml`
 
 ---

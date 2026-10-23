@@ -49,7 +49,7 @@
 
 ```yaml
 run_id: "YYYYMMDD-HHMM-central"
-content_id: "stable-unique-id"
+content_id: "psych-20261022-autonomy-cost"
 target_lane: "psychology" | "system-glitch" | "hypit" | "omni"
 selected_angle: "one clear sentence"
 source_urls: [...]
@@ -72,3 +72,7 @@ created_at: "ISO-8601"
 - Publishing to YouTube, Metricool, or any public platform
 - Changing live videos
 - Spending money on APIs
+
+## Implementation boundary
+
+This is the desired farm architecture. The hub currently certifies only local exclusive claiming, writing validation and gated completion hooks. It does not implement human release approval, publishing, actual Drive transfer, rendering, video QA or the five lane runtimes. Automated helpers refuse RELEASE_APPROVED. No lane repo integration is certified by hub tests.

@@ -1,55 +1,62 @@
-"""Quality gates — fail closed. Partial work is not success."""
-
-from __future__ import annotations
-
+"""Deterministic quality gates. Semantic review remains a human responsibility."""
+import re
 from pathlib import Path
-from typing import Iterable
+from .config import CONFIG
+class QualityGateError(Exception): pass
+
+def require_files(paths, labels=None):
+    paths = list(paths)
+    labels = [str(p) for p in paths] if labels is None else list(labels)
+    if not paths or len(paths) != len(labels): raise QualityGateError('Empty or mismatched required files')
+    bad = [label for p, label in zip(paths, labels) if not Path(p).is_file() or Path(p).stat().st_size == 0]
+    if bad: raise QualityGateError('Missing/empty files: ' + ', '.join(bad))
+
+def require_non_empty(path, min_chars=50, label=None):
+    require_files([path]); text = Path(path).read_text(encoding='utf-8').strip()
+    if len(text) < min_chars: raise QualityGateError(f'Too short: {label or path}')
+    if re.search(r'\[\s*VERIFY\b[^\]]*\]', text, re.I): raise QualityGateError('Unresolved VERIFY flag')
+    for term in CONFIG['quality']['banned_terms']:
+        if re.search(r'(?<!\w)' + re.escape(term) + r'(?!\w)', text, re.I): raise QualityGateError('Banned term')
+    return text
+
+def words(path, minimum, maximum=None):
+    text = require_non_empty(path)
+    n = len(re.findall(r"\b[\w]+(?:['’-][\w]+)*\b", text))
+    if n < minimum or (maximum is not None and n > maximum): raise QualityGateError(f'Word count {n} out of bounds: {path}')
+
+def psychology_gate(*, flagship, short1, short2, short3, companion):
+    q = CONFIG['quality']
+    words(flagship, q['flagship_min_words'], q['flagship_max_words'])
+    for s in (short1, short2, short3): words(s, q['short_min_words'])
+    words(companion, q['companion_min_words'])
+    shorts = [Path(s).read_text().strip().casefold() for s in (short1, short2, short3)]
+    if len(set(shorts)) != 3: raise QualityGateError('Shorts must be distinct')
+
+def glitch_gate(*, script, scene_plan):
+    words(script, 40)
+    require_non_empty(scene_plan, 100)
 
 
-class QualityGateError(Exception):
-    def __init__(self, missing: list[str]):
-        self.missing = missing
-        super().__init__("Quality gate failed: " + "; ".join(missing))
-
-
-def require_files(paths: Iterable[Path], labels: Iterable[str] | None = None) -> None:
-    missing = []
-    labels = list(labels) if labels else [str(p) for p in paths]
-    for path, label in zip(paths, labels):
-        if not Path(path).exists():
-            missing.append(f"missing file: {label}")
-    if missing:
-        raise QualityGateError(missing)
-
-
-def require_non_empty(path: Path, min_chars: int = 50, label: str | None = None) -> None:
-    p = Path(path)
-    if not p.exists():
-        raise QualityGateError([f"missing file: {label or p}"])
-    text = p.read_text(encoding="utf-8").strip()
-    if len(text) < min_chars:
-        raise QualityGateError([f"too short ({len(text)} chars): {label or p}"])
-
-
-def psychology_gate(
-    *,
-    flagship: Path,
-    short1: Path,
-    short2: Path,
-    short3: Path,
-    companion: Path,
-) -> None:
-    require_files(
-        [flagship, short1, short2, short3, companion],
-        ["flagship_script", "short_1", "short_2", "short_3", "companion_article"],
-    )
-    require_non_empty(flagship, min_chars=2000, label="flagship_script")
-    for s, name in ((short1, "short_1"), (short2, "short_2"), (short3, "short_3")):
-        require_non_empty(s, min_chars=80, label=name)
-    require_non_empty(companion, min_chars=800, label="companion_article")
-
-
-def glitch_gate(*, script: Path, scene_plan: Path) -> None:
-    require_files([script, scene_plan], ["glitch_script", "scene_plan"])
-    require_non_empty(script, min_chars=100, label="glitch_script")
-    require_non_empty(scene_plan, min_chars=100, label="scene_plan")
+def psychology_short_gate(*, script, scene_plan):
+    """Standalone Short: preserve source narration and concrete motion directions."""
+    import hashlib
+    import json
+    words(script, 40, 180)
+    text = Path(script).read_text(encoding='utf-8')
+    job = json.loads(require_non_empty(scene_plan))
+    if job.get('narration') != text or job.get('narration_sha256') != hashlib.sha256(text.encode()).hexdigest():
+        raise QualityGateError('Narration/source hash mismatch')
+    if job.get('motion_required') is not True:
+        raise QualityGateError('Motion is mandatory')
+    scenes = job.get('scenes')
+    if not isinstance(scenes, list) or not scenes:
+        raise QualityGateError('Missing scenes')
+    ids = []
+    for scene in scenes:
+        if not isinstance(scene, dict) or not all(isinstance(scene.get(k), str) and scene[k].strip() for k in ('id', 'narration', 'action', 'prompt')):
+            raise QualityGateError('Incomplete scene')
+        if scene.get('character_present') is not False:
+            raise QualityGateError('Cast workflow not certified')
+        ids.append(scene['id'])
+    if len(set(ids)) != len(ids) or ' '.join(' '.join(s['narration'].split()) for s in scenes) != ' '.join(text.split()):
+        raise QualityGateError('Scene identity/narration mismatch')

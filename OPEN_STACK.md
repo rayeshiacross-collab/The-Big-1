@@ -1,6 +1,6 @@
 # REBOOTv2 — Open Stack Policy (Mandatory)
 
-**Rule: If an open-source or free alternative exists, we use it. Paid services are forbidden by default.**
+**Rule: If an open-source or free alternative exists, we use it. Paid services are forbidden in this hub.**
 
 ## Allowed (preferred)
 
@@ -17,9 +17,9 @@
 | Version control | GitHub |
 | Secrets | GitHub Secrets / environment variables only |
 
-## Explicitly forbidden by default
+## Explicitly forbidden in this hub
 
-- Paid LLM APIs (OpenAI, Anthropic, etc.) unless you explicitly override for a one-off test
+- Paid LLM APIs (OpenAI, Anthropic, etc.) with no runtime override in this hub
 - vidIQ, TubeBuddy, or any paid YouTube analytics
 - Paid search or trend APIs
 - Paid stock footage / music libraries when open alternatives exist
@@ -27,7 +27,7 @@
 
 ## How Hermes must behave
 
-1. Prefer local model endpoints.
+1. Require loopback-IP local model endpoints; remote hosts, redirects and proxy routing are rejected.
 2. If a local model is unavailable, fail clearly and ask — do not silently fall back to a paid API.
 3. All skills assume public sources and open tools only.
 4. When generating visuals or video packages, use open prompt formats compatible with ComfyUI / open video pipelines.

@@ -1,74 +1,42 @@
-"""Minimal client for local OpenAI-compatible endpoints (Ollama, vLLM, llama.cpp, LM Studio)."""
-
-from __future__ import annotations
-
-import json
-from typing import Any
-
+"""Explicit protocol, bounded retries and strict local-only model transport."""
+import time
 import requests
+from .config import LOCAL_MODEL_BASE_URL, LOCAL_MODEL_NAME, LOCAL_MODEL_PROTOCOL, assert_open_stack
+class LocalModelError(Exception): pass
 
-from .config import LOCAL_MODEL_BASE_URL, LOCAL_MODEL_NAME, assert_open_stack
-
-
-class LocalModelError(Exception):
-    pass
-
-
-def chat(
-    messages: list[dict[str, str]],
-    *,
-    model: str | None = None,
-    temperature: float = 0.4,
-    max_tokens: int = 2048,
-) -> str:
-    """Call a local OpenAI-compatible /v1/chat/completions endpoint."""
+def chat(messages, *, model=None, temperature=0.4, max_tokens=2048):
     assert_open_stack()
+    url = LOCAL_MODEL_BASE_URL.rstrip('/')
     model = model or LOCAL_MODEL_NAME
-    url = LOCAL_MODEL_BASE_URL.rstrip("/")
+    if LOCAL_MODEL_PROTOCOL == 'ollama':
+        endpoint = url.removesuffix('/v1') + '/api/chat'
+        payload = dict(model=model, messages=messages, stream=False, options=dict(temperature=temperature, num_predict=max_tokens))
+    else:
+        endpoint = url if url.endswith('/v1') else url + '/v1'
+        endpoint += '/chat/completions'
+        payload = dict(model=model, messages=messages, temperature=temperature, max_tokens=max_tokens)
+    # Ignore proxy environment and reject redirects; neither may reroute local prompts.
+    with requests.Session() as session:
+        session.trust_env = False
+        for attempt in range(3):
+            try:
+                r = session.post(endpoint, json=payload, timeout=(5, 300), allow_redirects=False)
+                if r.status_code in {429, 500, 502, 503, 504} and attempt < 2:
+                    time.sleep(0.25 * (attempt + 1)); continue
+                if r.status_code != 200: raise LocalModelError(f'Model returned HTTP {r.status_code}')
+                data = r.json()
+                result = data['message']['content'] if LOCAL_MODEL_PROTOCOL == 'ollama' else data['choices'][0]['message']['content']
+                if not isinstance(result, str) or not result.strip(): raise ValueError('Empty model reply')
+                return result
+            except (requests.ConnectionError, requests.Timeout) as e:
+                if attempt == 2: raise LocalModelError('Local model unreachable after 3 attempts') from e
+                time.sleep(0.25 * (attempt + 1))
+            except (ValueError, KeyError, IndexError, TypeError) as e:
+                raise LocalModelError('Malformed local model reply') from e
 
-    # Ollama native style
-    if "11434" in url and not url.endswith("/v1"):
-        # try Ollama /api/chat
-        payload = {
-            "model": model,
-            "messages": messages,
-            "stream": False,
-            "options": {"temperature": temperature, "num_predict": max_tokens},
-        }
-        r = requests.post(f"{url}/api/chat", json=payload, timeout=300)
-        if r.status_code == 200:
-            data = r.json()
-            return data.get("message", {}).get("content", "") or data.get("response", "")
-        # fall through to openai-compat attempt
-
-    # OpenAI-compatible
-    if not url.endswith("/v1"):
-        url = url + "/v1"
-    payload = {
-        "model": model,
-        "messages": messages,
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    r = requests.post(f"{url}/chat/completions", json=payload, timeout=300)
-    if r.status_code != 200:
-        raise LocalModelError(f"Local model error {r.status_code}: {r.text[:500]}")
-    data = r.json()
+def doctor_check():
     try:
-        return data["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError) as e:
-        raise LocalModelError(f"Unexpected response shape: {json.dumps(data)[:500]}") from e
-
-
-def doctor_check() -> dict[str, Any]:
-    """Quick reachability check for the doctor skill."""
-    try:
-        reply = chat(
-            [{"role": "user", "content": "Reply with exactly: OK"}],
-            max_tokens=8,
-            temperature=0,
-        )
-        ok = "OK" in (reply or "").upper()
-        return {"reachable": True, "ok": ok, "sample": (reply or "")[:80]}
+        reply = chat([dict(role='user', content='Reply with exactly: OK')], max_tokens=8, temperature=0)
+        return dict(reachable=True, ok=reply.strip() == 'OK', sample=reply[:80])
     except Exception as e:
-        return {"reachable": False, "ok": False, "error": str(e)}
+        return dict(reachable=False, ok=False, error=str(e))
