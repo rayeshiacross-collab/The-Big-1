@@ -1,7 +1,7 @@
 """Synthetic orchestration/media fixtures. No Hermes perception or production claimed."""
 import hashlib,json,os,shutil,subprocess,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from src import autonomous_video as av
 from src.self_qa import VIDEO_CHECKS
 
@@ -51,6 +51,15 @@ class ContractTests(unittest.TestCase):
             env=av.isolated_env(Path(t))
             self.assertNotIn('OPENAI_API_KEY',env);self.assertNotIn('HTTP_PROXY',env)
             self.assertEqual(env['ALLOW_PAID_APIS'],'0')
+    def test_runtime_doctor_checks_model_inventory(self):
+        tools=dict(model='local',model_base_url='http://127.0.0.1:11434',local_tools=[dict(name=x,executable='fixture',capability=x,license='MIT') for x in ('speech','render','video_review','audio_review')])
+        session=Mock();session.__enter__=Mock(return_value=session);session.__exit__=Mock(return_value=False)
+        session.get.return_value=Mock(status_code=200,json=lambda:{'data':[{'id':'local'}]})
+        with tempfile.TemporaryDirectory() as t,patch.dict(os.environ,MACHINE_LEDGER_PATH=str(Path(t)/'machine.jsonl')),patch.object(av.shutil,'which',return_value='/fixture'),patch.object(av.subprocess,'run',return_value=Mock(returncode=0,stdout='--safe-mode --query-file --base-url --oneshot')),patch.object(av.requests,'Session',return_value=session):
+            self.assertEqual(av.doctor(tools)[1],'http://127.0.0.1:11434/v1')
+            self.assertFalse(session.trust_env);self.assertFalse(session.get.call_args.kwargs['allow_redirects'])
+            session.get.return_value=Mock(status_code=200,json=lambda:{'data':[{'id':'different-model'}]})
+            with self.assertRaises(av.ProductionError):av.doctor(tools)
     def test_no_legacy_plan_input(self):
         with tempfile.TemporaryDirectory() as t:
             p=Path(t)/'policy.json';dump(p,{**POLICY,'scenes':['operator idea']})
@@ -77,6 +86,22 @@ class MediaTests(unittest.TestCase):
     def test_static_rejected(self):
         fixture(self.root,static=True)
         with self.assertRaisesRegex(av.ProductionError,'Static'): av.validate_package(self.root,CID,SCRIPT,POLICY,REGISTRY)
+    def test_failed_self_qa_is_sent_back_for_repair(self):
+        cfg=self.root/'qa_cfg';cfg.mkdir();(cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY);dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',local_tools=REGISTRY,max_repair_attempts=1))
+        calls=[]
+        def fake_agent(exe,url,tools,prompt,folder):
+            calls.append(prompt);fixture(folder)
+            if len(calls)==1:
+                q=json.loads((folder/'self_qa.json').read_text());q['checks']['sound']['status']='FAIL';dump(folder/'self_qa.json',q)
+        with patch.dict(os.environ,MACHINE_LEDGER_PATH=str(cfg/'machine.jsonl')),patch.object(av,'doctor',return_value=('fixture','http://127.0.0.1/v1')),patch.object(av,'invoke',side_effect=fake_agent):
+            r=av.produce(CID,cfg/'script.txt',cfg/'policy.json',cfg/'tools.json',output=cfg/'out')
+        self.assertEqual(len(calls),2);self.assertIn('sound',calls[1]);self.assertEqual(r['status'],'READY_FOR_OWNER_INSPECTION')
+    def test_exhausted_repairs_do_not_claim_completion(self):
+        cfg=self.root/'bad_cfg';cfg.mkdir();(cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY);dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',local_tools=REGISTRY,max_repair_attempts=1))
+        with patch.dict(os.environ,MACHINE_LEDGER_PATH=str(cfg/'machine.jsonl')),patch.object(av,'doctor',return_value=('fixture','http://127.0.0.1/v1')),patch.object(av,'invoke',side_effect=lambda e,u,t,p,f:fixture(f,static=True)):
+            with self.assertRaises(av.ProductionError):av.produce(CID,cfg/'script.txt',cfg/'policy.json',cfg/'tools.json',output=cfg/'out')
+        status=json.loads(next((cfg/'out').rglob('run_status.json')).read_text())
+        self.assertEqual(status['status'],'BLOCKED_OR_FAILED');self.assertFalse(list((cfg/'out').rglob('verified_delivery.json')))
     def test_repair_loop_is_real_orchestration_not_a_completed_hermes_run(self):
         cfg=self.root/'cfg';cfg.mkdir();(cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY);dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',local_tools=REGISTRY,max_repair_attempts=1))
         calls=[]
