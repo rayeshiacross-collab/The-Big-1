@@ -1,0 +1,25 @@
+# REBOOTv2 shared runner config
+
+lane: central
+timezone: America/Chicago
+
+paths:
+  ledger: ./ledgers
+  handoff: ./handoffs
+  output: ./output
+
+model:
+  base_url: http://127.0.0.1:11434
+  name: llama3.1:8b-instruct-q5_K_M
+  large: ""
+
+safety:
+  allow_paid_apis: false
+
+status_vocabulary:
+  - RESEARCH_COMPLETE
+  - WRITING_IN_PROGRESS
+  - WRITING_COMPLETE
+  - RENDER_PENDING
+  - VIDEO_QA_PASSED
+  - RELEASE_APPROVED
