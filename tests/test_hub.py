@@ -6,6 +6,12 @@ from unittest.mock import patch, Mock
 from concurrent.futures import ProcessPoolExecutor
 from src import config, handoff, ledger, drive_storage, runner, local_model, validators
 from src.safety import confined
+from src.self_qa import require_self_qa, WRITING_CHECKS, VIDEO_CHECKS
+
+def qa_fixture(cid, files, stage="writing"):
+    # Synthetic receipt for gate regression only; never a production review.
+    import hashlib
+    return dict(reviewer="Hermes",content_id=cid,stage=stage,verdict="PASS",reviewed_at="2026-10-22T20:00:00-05:00",unresolved_issues=[],artifact_sha256={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in files},checks={k:dict(status="PASS",evidence="Synthetic gate fixture only") for k in (WRITING_CHECKS if stage=="writing" else VIDEO_CHECKS)},watched_full_video=True,listened_full_audio=True)
 
 CID = 'psych-20261022-test'
 RID = '20261022-0600-central'
@@ -64,11 +70,11 @@ class HubTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token)
         self.assertEqual(ledger.last_status(RID,CID),'WRITING_IN_PROGRESS')
         files[0].write_text('word '*340)
-        with self.assertRaises(validators.QualityGateError): runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token,drive_verifier=lambda *_:True)
+        with self.assertRaises(validators.QualityGateError): runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token,drive_verifier=lambda *_:True,self_qa_report=qa_fixture(CID,files))
         files[0].write_text('word '*1300+' [VERIFY]')
-        with self.assertRaises(validators.QualityGateError): runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token,drive_verifier=lambda *_:True)
+        with self.assertRaises(validators.QualityGateError): runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token,drive_verifier=lambda *_:True,self_qa_report=qa_fixture(CID,files))
         files[0].write_text('word '*1300)
-        runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token,drive_verifier=lambda *_:True)
+        runner.mark_complete(RID,CID,'psychology',files,claim_token=h.claim_token,drive_verifier=lambda *_:True,self_qa_report=qa_fixture(CID,files))
         self.assertEqual(ledger.last_status(RID,CID),'WRITING_COMPLETE')
         with self.assertRaises(RuntimeError): handoff.claim(CID,'psychology')
     def test_banned_and_duplicate(self):
@@ -119,10 +125,27 @@ class HubTests(unittest.TestCase):
         job=dict(narration=text,narration_sha256=hashlib.sha256(text.encode()).hexdigest(),motion_required=True,scenes=[dict(id='s1',narration=text,action='Hand puts phone down',prompt='Hand places phone on table',character_present=False)])
         files=[drive_storage.save_text(cid,'script.txt',text),drive_storage.save_text(cid,'scene_plan.json',json.dumps(job))]
         with self.assertRaises(RuntimeError): runner.mark_complete(RID,cid,'psychology',files,claim_token=claimed.claim_token)
-        runner.mark_complete(RID,cid,'psychology',files,claim_token=claimed.claim_token,drive_verifier=lambda *_:True)
+        runner.mark_complete(RID,cid,'psychology',files,claim_token=claimed.claim_token,drive_verifier=lambda *_:True,self_qa_report=qa_fixture(cid,files))
         self.assertEqual(ledger.last_status(RID,cid),'WRITING_COMPLETE')
         job['narration_sha256']='invalid';files[1].write_text(json.dumps(job))
         with self.assertRaises(validators.QualityGateError): validators.psychology_short_gate(script=files[0],scene_plan=files[1])
+    def test_missing_and_stale_hermes_review(self):
+        files=self.package()
+        with self.assertRaises(validators.QualityGateError): require_self_qa(None,content_id=CID,files=files)
+        review=qa_fixture(CID,files)
+        files[0].write_text('changed')
+        with self.assertRaises(validators.QualityGateError): require_self_qa(review,content_id=CID,files=files)
+    def test_video_review_requires_every_check_and_full_playback(self):
+        files=self.package();review=qa_fixture(CID,files,'video')
+        require_self_qa(review,content_id=CID,files=files,stage='video')
+        review['watched_full_video']=False
+        with self.assertRaises(validators.QualityGateError): require_self_qa(review,content_id=CID,files=files,stage='video')
+        review['watched_full_video']=True;review['checks']['sound']['status']='FAIL'
+        with self.assertRaises(validators.QualityGateError): require_self_qa(review,content_id=CID,files=files,stage='video')
+    def test_completion_without_hermes_review_stays_draft(self):
+        claimed=handoff.claim(CID,'psychology');files=self.package()
+        with self.assertRaises(validators.QualityGateError): runner.mark_complete(RID,CID,'psychology',files,claim_token=claimed.claim_token,drive_verifier=lambda *_:True)
+        self.assertEqual(ledger.last_status(RID,CID),'WRITING_IN_PROGRESS')
     def test_workflow_no_input_shell_interpolation(self):
         text=(config.ROOT/'.github/workflows/manual-run.yml').read_text()
         self.assertIn('contents: read',text);self.assertIn('concurrency:',text)

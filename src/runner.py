@@ -8,6 +8,7 @@ from .handoff import Handoff, claim, claim_file, verify_claim, abandon_claim
 from .ledger import _append, storage_lock
 from .local_model import doctor_check
 from . import validators, drive_storage
+from .self_qa import require_self_qa
 from .safety import confined
 
 def central_now(): return datetime.now(ZoneInfo(TZ))
@@ -20,7 +21,7 @@ def start_lane(lane, content_id):
     doctor()
     return claim(content_id, lane)
 
-def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *, claim_token=None, drive_verifier=None):
+def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *, claim_token=None, drive_verifier=None, self_qa_report=None):
     assert_open_stack()
     if status != 'WRITING_COMPLETE': raise PermissionError('Rendering/release gates require separate reviewed implementations')
     with storage_lock():
@@ -55,7 +56,8 @@ def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *,
         # The bundled Drive helper is local-only. No receipt flag can masquerade as a provider readback.
         if drive_verifier is None: raise RuntimeError('Real Drive upload/readback adapter required; local-only completion remains draft')
         if drive_verifier(content_id, paths) is not True: raise RuntimeError('Drive verification failed')
-        _append(run_id, content_id=content_id, lane=lane, status=status, files=[str(p) for p in paths])
+        review = require_self_qa(self_qa_report, content_id=content_id, files=paths, stage='writing')
+        _append(run_id, content_id=content_id, lane=lane, status=status, files=[str(p) for p in paths], extra={'self_qa': review})
         claim_file(content_id).unlink()
     print(f'{status}: {content_id}')
 

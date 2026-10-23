@@ -33,3 +33,7 @@ Existing lane callers must migrate to claim tokens, immutable outputs, fixed com
 ## Real-input feed test follow-up
 
 Feeding six existing Psychology Shorts exposed a missing standalone completion profile. Added explicit `asset_profile: psychology_short` (Psychology only), requiring script.txt + scene_plan.json, 40–180 narration words, exact source hash and scene narration coverage, unique scene IDs and concrete object/environment action prompts. The default flagship/trio/article gate is unchanged. A six-script real-input validation passed; actual start_lane stopped because the local model doctor could not connect after three attempts. No real claim, completion, render or publication occurred. The additional standalone-profile regression brings the suite to 16 tests.
+
+## Owner-required Hermes self-QA
+
+Added a mandatory hash-bound Hermes writing review to the completion path and a finished-video review validator requiring all nine checks and full video/audio playback attestations. Missing/stale/failed review leaves the item in progress. HERMES_SELF_QA.md gives the actual review and fix/recheck procedure. The gate validates evidence structure, not perception or reviewer authentication; actual Hermes execution and final-video integration remain outstanding. All 19 regression tests pass, including missing/stale review rejection and full-playback/video-check requirements.
