@@ -1,0 +1,39 @@
+name: Manual Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "doctor | claim"
+        required: true
+        default: doctor
+      lane:
+        description: "Lane name (for claim)"
+        required: false
+        default: ""
+      content_id:
+        description: "content_id (for claim)"
+        required: false
+        default: ""
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Doctor / Claim
+        env:
+          LOCAL_MODEL_BASE_URL: ${{ secrets.LOCAL_MODEL_BASE_URL }}
+          LOCAL_MODEL_NAME: ${{ secrets.LOCAL_MODEL_NAME }}
+          ALLOW_PAID_APIS: "0"
+        run: |
+          if [ "${{ github.event.inputs.command }}" = "doctor" ]; then
+            python -m src.runner doctor
+          else
+            python -m src.runner claim --lane "${{ github.event.inputs.lane }}" --content-id "${{ github.event.inputs.content_id }}"
+          fi
