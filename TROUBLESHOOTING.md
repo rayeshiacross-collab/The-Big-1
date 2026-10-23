@@ -28,10 +28,10 @@
 - Only public / authenticated metrics you actually have access to.
 - If metrics are missing, say so — do not invent numbers.
 
-## 7. “Video package doesn’t match the cyborg”
-- video-from-script must reference the approved asset only.
-- No redesign, no mirroring.
-- Re-run with the hard visual rules enforced.
+## 7. “Video package has a host / cyborg in it”
+- Visual identity is cyberpunk motion graphics only.
+- **No recurring host character / no cyborg** in any prompt or scene.
+- Re-run video-from-script with the hard visual rules enforced.
 
 ## 8. “I don’t know what state anything is in”
 - Open the ledger first.
