@@ -1,6 +1,7 @@
 """Run Hermes as a script-only autonomous producer; verify real files, not promises."""
 from __future__ import annotations
 import argparse, hashlib, ipaddress, json, os, re, shutil, subprocess
+import requests
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -9,6 +10,7 @@ from .config import OUTPUT_PATH
 from .machine_usage import tracked
 from .safety import content_id as valid_id, confined
 from .self_qa import require_self_qa
+from .validators import QualityGateError
 
 class ProductionError(RuntimeError): pass
 POLICY_KEYS={'brand','visual_style','palette','format','dimensions','fps','voice','language','caption_style','asset_licenses'}
@@ -57,9 +59,18 @@ def doctor(tools):
         if not all(tool.get(k) for k in ('name','executable','capability','license')) or not shutil.which(tool['executable']): raise ProductionError('Required open local tool missing or unlicensed')
         if 'endpoint' in tool: endpoint(tool['endpoint'])
         capabilities.add(tool['capability'])
-    if not {'speech','render','video_review','audio_review'}.issubset(capabilities): raise ProductionError('Speech, rendering, full-video review and full-audio review tools required')
+    missing=sorted({'speech','render','video_review','audio_review'}-capabilities)
+    if missing: raise ProductionError('Missing configured local capabilities: '+', '.join(missing))
     result=subprocess.run([exe,'chat','--help'],capture_output=True,text=True,timeout=30)
     if result.returncode or any(flag not in result.stdout for flag in ('--safe-mode','--query-file','--base-url','--oneshot')): raise ProductionError('Installed Hermes lacks required isolated one-shot CLI options')
+    try:
+        with requests.Session() as session:
+            session.trust_env=False
+            response=session.get(url+'/models',timeout=10,allow_redirects=False)
+            if response.status_code!=200 or tools['model'] not in {x['id'] for x in response.json()['data']}:
+                raise ProductionError('Configured local model is not available at the endpoint')
+    except (requests.RequestException,ValueError,KeyError,TypeError) as e:
+        raise ProductionError('Local model inventory is unreachable or invalid') from e
     return exe,url
 
 def isolated_env(home):
@@ -252,7 +263,7 @@ def produce(content_id,script_path,policy_path,tools_path,*,output=None):
                 status.update(status='HERMES_PRODUCING' if not attempt else 'HERMES_REPAIRING',attempt=attempt);save_json(run/'run_status.json',status)
                 invoke(exe,url,tools,request_text(content_id,status['source_sha256'],policy,tools,previous,defects),folder)
                 try: report=validate_package(folder,content_id,script,policy,tools.get('local_tools',[]))
-                except (ProductionError,ValueError,KeyError,TypeError,FileNotFoundError) as e:
+                except (ProductionError,QualityGateError,ValueError,KeyError,TypeError,OSError,ZeroDivisionError) as e:
                     defects=[str(e)];save_json(folder/'validation_failure.json',{'defects':defects,'ready':False});previous=folder
                     if (folder/'blocked.json').exists() or attempt==rounds: raise ProductionError(defects[0]) from e
                     continue
