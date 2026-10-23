@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -27,6 +28,7 @@ class HubTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
+        p=patch.dict(os.environ,MACHINE_LEDGER_PATH=str(self.root/"machine_usage.jsonl"));p.start();self.addCleanup(p.stop)
         for mod, name, val in [(config,'LEDGER_PATH','ledger'),(ledger,'LEDGER_PATH','ledger'),(config,'HANDOFF_PATH','handoff'),(handoff,'HANDOFF_PATH','handoff'),(config,'OUTPUT_PATH','output'),(drive_storage,'OUTPUT_PATH','output'),(runner,'OUTPUT_PATH','output')]:
             p=patch.object(mod,name,self.root/val);p.start();self.addCleanup(p.stop)
         self.h = handoff.Handoff(RID,CID,'psychology','Test angle',required_assets=['flagship.txt','short1.txt','short2.txt','short3.txt','companion.txt']);self.h.save()
@@ -146,6 +148,31 @@ class HubTests(unittest.TestCase):
         claimed=handoff.claim(CID,'psychology');files=self.package()
         with self.assertRaises(validators.QualityGateError): runner.mark_complete(RID,CID,'psychology',files,claim_token=claimed.claim_token,drive_verifier=lambda *_:True)
         self.assertEqual(ledger.last_status(RID,CID),'WRITING_IN_PROGRESS')
+    def test_machine_ledger_records_failure_and_nested_run(self):
+        from src.machine_usage import recent_runs, usage_path
+        with patch.object(runner,'doctor_check',return_value=dict(reachable=False,ok=False)):
+            with self.assertRaises(SystemExit): runner.start_lane('psychology',CID)
+        rows=recent_runs()
+        self.assertEqual(len(rows),1);self.assertEqual(rows[0]['operation'],'claim');self.assertEqual(rows[0]['result'],'FAILED')
+        events=[json.loads(s) for s in usage_path().read_text().splitlines()]
+        self.assertEqual(len(events),4)
+        self.assertEqual(events[0]['local_time'][-6:], '-05:00')
+        self.assertEqual(len({e['execution_id'] for e in events}),1)
+    def test_machine_ledger_logs_no_secrets_and_preserves_attempts(self):
+        from src.machine_usage import tracked, recent_runs, usage_path
+        @tracked('fixture')
+        def f(content_id, claim_token): return True
+        f(CID,'SECRET_TOKEN_NEVER_RECORD')
+        f(CID,'ANOTHER_SECRET')
+        self.assertNotIn('SECRET',usage_path().read_text())
+        self.assertEqual(len(recent_runs()),2)
+        self.assertTrue(all(r['result']=='SUCCEEDED' for r in recent_runs()))
+    def test_machine_ledger_failure_prevents_work(self):
+        from src.machine_usage import tracked
+        action=Mock()
+        with patch('src.machine_usage._append',side_effect=OSError('disk unavailable')):
+            with self.assertRaises(OSError): tracked('fixture')(action)()
+        action.assert_not_called()
     def test_workflow_no_input_shell_interpolation(self):
         text=(config.ROOT/'.github/workflows/manual-run.yml').read_text()
         self.assertIn('contents: read',text);self.assertIn('concurrency:',text)
