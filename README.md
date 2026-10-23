@@ -5,7 +5,7 @@
 This is the big one.  
 One farm. Five workers. Hermes + open-source only. Nothing ships without you.
 
-This repository is a hardened shared skeleton, not a running farm. No publisher, release-approval command, real Drive adapter, renderer or lane-specific generator is implemented here. See [HARDENING.md](./HARDENING.md) for tested scope and recovery instructions.
+This repository provides hardened shared controls and a [script-only Hermes production entrypoint](./docs/AUTONOMOUS_VIDEO.md). With an installed local Hermes/model and real media tools, Hermes independently creates and reviews the video package. This repository does not provision those tools, a running farm, Drive integration or publishing. See [HARDENING.md](./HARDENING.md) for tested scope and limits.
 
 ## The Five Lanes
 

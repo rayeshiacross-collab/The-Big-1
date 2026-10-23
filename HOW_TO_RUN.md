@@ -64,3 +64,7 @@ Each record includes timestamps (UTC and Chicago at start), operation/execution 
 Runtime history stays on the machine's persistent disk, ignored by Git. If the checkout is ephemeral, set MACHINE_LEDGER_PATH to a persistent mounted path; the repository does not provision a server or persistent disk. Keep this machine ledger separate from content-specific ledger paths so per-batch path overrides do not scatter the machine's usage history. Drive copies are optional backups, not the primary usage ledger. No pre-existing history is invented or backfilled as new runs.
 
 Hub timezone uses `HUB_TIMEZONE` or YAML (America/Chicago), not the host system TZ variable. UTC timestamps remain authoritative.
+
+## Autonomous video production
+
+Use `python -m src.autonomous_video --help` and [docs/AUTONOMOUS_VIDEO.md](docs/AUTONOMOUS_VIDEO.md). This is the production entrypoint for script-only input and Hermes-authored scenes, assets, inspection and bounded repairs. It never consumes legacy scene jobs and never publishes automatically. No missing runtime is simulated.
