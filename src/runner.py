@@ -37,7 +37,10 @@ def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *,
         validators.require_files(required)
         by_name = {p.name: p for p in paths}
         if len(by_name) != len(paths): raise validators.QualityGateError('Duplicate asset names')
-        if lane == 'psychology':
+        if lane == 'psychology' and h.asset_profile == 'psychology_short':
+            if not {'script.txt', 'scene_plan.json'}.issubset(by_name): raise validators.QualityGateError('Standalone Short package incomplete')
+            validators.psychology_short_gate(script=by_name['script.txt'], scene_plan=by_name['scene_plan.json'])
+        elif lane == 'psychology':
             names = ['flagship.txt', 'short1.txt', 'short2.txt', 'short3.txt', 'companion.txt']
             if not set(names).issubset(by_name): raise validators.QualityGateError('Psychology package missing required files')
             validators.psychology_gate(**dict(zip(['flagship', 'short1', 'short2', 'short3', 'companion'], [by_name[n] for n in names])))

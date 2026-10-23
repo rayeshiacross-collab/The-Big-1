@@ -35,3 +35,28 @@ def psychology_gate(*, flagship, short1, short2, short3, companion):
 def glitch_gate(*, script, scene_plan):
     words(script, 40)
     require_non_empty(scene_plan, 100)
+
+
+def psychology_short_gate(*, script, scene_plan):
+    """Standalone Short: preserve source narration and concrete motion directions."""
+    import hashlib
+    import json
+    words(script, 40, 180)
+    text = Path(script).read_text(encoding='utf-8')
+    job = json.loads(require_non_empty(scene_plan))
+    if job.get('narration') != text or job.get('narration_sha256') != hashlib.sha256(text.encode()).hexdigest():
+        raise QualityGateError('Narration/source hash mismatch')
+    if job.get('motion_required') is not True:
+        raise QualityGateError('Motion is mandatory')
+    scenes = job.get('scenes')
+    if not isinstance(scenes, list) or not scenes:
+        raise QualityGateError('Missing scenes')
+    ids = []
+    for scene in scenes:
+        if not isinstance(scene, dict) or not all(isinstance(scene.get(k), str) and scene[k].strip() for k in ('id', 'narration', 'action', 'prompt')):
+            raise QualityGateError('Incomplete scene')
+        if scene.get('character_present') is not False:
+            raise QualityGateError('Cast workflow not certified')
+        ids.append(scene['id'])
+    if len(set(ids)) != len(ids) or ' '.join(' '.join(s['narration'].split()) for s in scenes) != ' '.join(text.split()):
+        raise QualityGateError('Scene identity/narration mismatch')

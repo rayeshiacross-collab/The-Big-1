@@ -21,8 +21,11 @@ class Handoff:
     required_assets: list[str] = field(default_factory=list)
     research_completion_status: str = 'RESEARCH_COMPLETE'
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    asset_profile: str = 'default'
     def validate(self):
         valid_run(self.run_id); valid_content(self.content_id); valid_lane(self.target_lane)
+        if self.asset_profile not in ('default', 'psychology_short') or (self.asset_profile == 'psychology_short' and self.target_lane != 'psychology'):
+            raise ValueError('Invalid lane asset profile')
         if self.research_completion_status != 'RESEARCH_COMPLETE' or not self.selected_angle.strip():
             raise ValueError('Incomplete research handoff')
         for name in self.required_assets: confined(Path('/assets'), name)

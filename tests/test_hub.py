@@ -110,6 +110,19 @@ class HubTests(unittest.TestCase):
             self.assertTrue(session.post.call_args.args[0].endswith('/v1/chat/completions'))
             session.post.return_value=Mock(status_code=200,json=lambda:{})
             with self.assertRaises(local_model.LocalModelError): local_model.chat([])
+    def test_standalone_short_profile(self):
+        import hashlib
+        cid='psych-20261022-standalone'
+        h=handoff.Handoff(RID,cid,'psychology','One Short',required_assets=['script.txt','scene_plan.json'],asset_profile='psychology_short');h.save()
+        claimed=handoff.claim(cid,'psychology')
+        text='word '*45
+        job=dict(narration=text,narration_sha256=hashlib.sha256(text.encode()).hexdigest(),motion_required=True,scenes=[dict(id='s1',narration=text,action='Hand puts phone down',prompt='Hand places phone on table',character_present=False)])
+        files=[drive_storage.save_text(cid,'script.txt',text),drive_storage.save_text(cid,'scene_plan.json',json.dumps(job))]
+        with self.assertRaises(RuntimeError): runner.mark_complete(RID,cid,'psychology',files,claim_token=claimed.claim_token)
+        runner.mark_complete(RID,cid,'psychology',files,claim_token=claimed.claim_token,drive_verifier=lambda *_:True)
+        self.assertEqual(ledger.last_status(RID,cid),'WRITING_COMPLETE')
+        job['narration_sha256']='invalid';files[1].write_text(json.dumps(job))
+        with self.assertRaises(validators.QualityGateError): validators.psychology_short_gate(script=files[0],scene_plan=files[1])
     def test_workflow_no_input_shell_interpolation(self):
         text=(config.ROOT/'.github/workflows/manual-run.yml').read_text()
         self.assertIn('contents: read',text);self.assertIn('concurrency:',text)
