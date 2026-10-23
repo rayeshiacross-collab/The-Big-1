@@ -59,7 +59,8 @@ def doctor(tools):
         if not all(tool.get(k) for k in ('name','executable','capability','license')) or not shutil.which(tool['executable']): raise ProductionError('Required open local tool missing or unlicensed')
         if 'endpoint' in tool: endpoint(tool['endpoint'])
         capabilities.add(tool['capability'])
-    if not {'speech','render','video_review','audio_review'}.issubset(capabilities): raise ProductionError('Speech, rendering, full-video review and full-audio review tools required')
+    missing=sorted({'speech','render','video_review','audio_review'}-capabilities)
+    if missing: raise ProductionError('Missing configured local capabilities: '+', '.join(missing))
     result=subprocess.run([exe,'chat','--help'],capture_output=True,text=True,timeout=30)
     if result.returncode or any(flag not in result.stdout for flag in ('--safe-mode','--query-file','--base-url','--oneshot')): raise ProductionError('Installed Hermes lacks required isolated one-shot CLI options')
     try:

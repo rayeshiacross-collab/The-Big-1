@@ -35,3 +35,7 @@ The production directory and machine ledger must be on persistent storage. This 
 Regression tests cover source-only prompts, rejecting legacy plan config/JSON input, local endpoint checks, credential isolation, missing runtime logging, actual FFmpeg fixture decode/motion/captions/metadata, missing full-audio review evidence, and a two-attempt repair loop. The agent/QA are synthetic fixtures in those tests, explicitly not evidence that Hermes generated or watched a real production video. Run the suite with FFmpeg installed; live generation requires the actual runtime.
 
 Official CLI reference used for invocation: https://github.com/NousResearch/hermes-agent/blob/main/website/docs/reference/cli-commands.md
+
+## Reproducible Hermes dependency setup
+
+`bash tools/install_hermes_local.sh /machine/runtime` installs the official source at a fixed inspected commit using its frozen dependency lock and Python 3.14. It does not choose a paid provider, authenticate, install model weights or start production. The initial implementation run installed this official runtime successfully and verified all required CLI flags; the earlier missing-Hermes attempt remains a historical failure. Local generation/review tools and a model still require real setup.
