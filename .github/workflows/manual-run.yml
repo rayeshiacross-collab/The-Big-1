@@ -1,39 +1,38 @@
-name: Manual Runner
-
+name: Manual Doctor
 on:
   workflow_dispatch:
     inputs:
       command:
-        description: "doctor | claim"
-        required: true
+        description: Local model doctor only; claims require persistent local storage
+        type: choice
+        options: [doctor]
         default: doctor
-      lane:
-        description: "Lane name (for claim)"
-        required: false
-        default: ""
-      content_id:
-        description: "content_id (for claim)"
-        required: false
-        default: ""
-
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: hub-local-doctor
+  cancel-in-progress: false
 jobs:
-  run:
-    runs-on: ubuntu-latest
+  doctor:
+    # Opt-in local runner: model remains loopback-only. Never expose Ollama publicly.
+    runs-on: [self-hosted, hub-local]
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Install deps
-        run: pip install -r requirements.txt
-      - name: Doctor / Claim
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Doctor
         env:
-          LOCAL_MODEL_BASE_URL: ${{ secrets.LOCAL_MODEL_BASE_URL }}
-          LOCAL_MODEL_NAME: ${{ secrets.LOCAL_MODEL_NAME }}
-          ALLOW_PAID_APIS: "0"
+          HUB_COMMAND: ${{ inputs.command }}
+          ALLOW_PAID_APIS: '0'
         run: |
-          if [ "${{ github.event.inputs.command }}" = "doctor" ]; then
-            python -m src.runner doctor
-          else
-            python -m src.runner claim --lane "${{ github.event.inputs.lane }}" --content-id "${{ github.event.inputs.content_id }}"
-          fi
+          case "$HUB_COMMAND" in
+            doctor) python -m src.runner doctor ;;
+            *) echo 'Unsupported command' >&2; exit 2 ;;
+          esac

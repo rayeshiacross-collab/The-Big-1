@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+ledgers/
+handoffs/
+output/
+*.claim.json
+*.lock
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/

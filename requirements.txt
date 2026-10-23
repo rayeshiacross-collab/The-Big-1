@@ -1,14 +1,5 @@
-# REBOOTv2 — open-source only
-# No paid API SDKs by default
-
-pyyaml>=6.0
-python-dotenv>=1.0
-requests>=2.31
-# Google Drive (optional — only if you use the official open client)
-# google-api-python-client>=2.100
-# google-auth>=2.23
-# google-auth-oauthlib>=1.1
-
-# Local model clients (pick what you run)
-# openai>=1.0          # only for OpenAI-compatible local endpoints (Ollama/vLLM/llama.cpp)
-# httpx>=0.25
+PyYAML==6.0.2
+python-dotenv==1.0.1
+requests==2.32.3
+filelock==3.16.1
+tzdata==2025.2

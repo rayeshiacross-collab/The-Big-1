@@ -1,88 +1,69 @@
-"""Base runner — claim → work → validate → ledger → save.
-
-Each lane subclasses or calls these helpers.
-"""
-
-from __future__ import annotations
-
+"""Validated writing orchestration. No publisher or release-approval endpoint."""
 import argparse
 from datetime import datetime
 from zoneinfo import ZoneInfo
-
-from .config import TZ, assert_open_stack, ensure_dirs
-from .handoff import Handoff, claim
-from .ledger import append_event, last_status
+from pathlib import Path
+from .config import TZ, assert_open_stack, ensure_dirs, OUTPUT_PATH
+from .handoff import Handoff, claim, claim_file, verify_claim, abandon_claim
+from .ledger import _append, storage_lock
 from .local_model import doctor_check
+from . import validators, drive_storage
+from .safety import confined
 
+def central_now(): return datetime.now(ZoneInfo(TZ))
+def make_run_id(): return central_now().strftime('%Y%m%d-%H%M-central')
+def doctor():
+    assert_open_stack(); ensure_dirs()
+    result = doctor_check(); print('DOCTOR REPORT', result)
+    if not result.get('reachable') or not result.get('ok'): raise SystemExit('Local doctor failed; fix before work')
+def start_lane(lane, content_id):
+    doctor()
+    return claim(content_id, lane)
 
-def central_now() -> datetime:
-    return datetime.now(ZoneInfo(TZ))
-
-
-def make_run_id() -> str:
-    return central_now().strftime("%Y%m%d-%H%M-central")
-
-
-def doctor() -> None:
+def mark_complete(run_id, content_id, lane, files, status='WRITING_COMPLETE', *, claim_token=None, drive_verifier=None):
     assert_open_stack()
-    ensure_dirs()
-    result = doctor_check()
-    print("DOCTOR REPORT")
-    print(result)
-    if not result.get("reachable"):
-        raise SystemExit("Local model not reachable. Fix before running.")
+    if status != 'WRITING_COMPLETE': raise PermissionError('Rendering/release gates require separate reviewed implementations')
+    with storage_lock():
+        h = Handoff.load(content_id)
+        if h.run_id != run_id or h.target_lane != lane: raise PermissionError('Handoff identity mismatch')
+        if not claim_token: raise PermissionError('Claim token required')
+        verify_claim(h, claim_token)
+        root = confined(OUTPUT_PATH, content_id)
+        paths = [Path(p).resolve() for p in files]
+        if any(not p.is_relative_to(root) for p in paths): raise ValueError('Output outside content folder')
+        validators.require_files(paths)
+        required = [confined(root, name) for name in h.required_assets]
+        if not required or not set(required).issubset(paths): raise validators.QualityGateError('Required assets absent from completion')
+        validators.require_files(required)
+        by_name = {p.name: p for p in paths}
+        if len(by_name) != len(paths): raise validators.QualityGateError('Duplicate asset names')
+        if lane == 'psychology':
+            names = ['flagship.txt', 'short1.txt', 'short2.txt', 'short3.txt', 'companion.txt']
+            if not set(names).issubset(by_name): raise validators.QualityGateError('Psychology package missing required files')
+            validators.psychology_gate(**dict(zip(['flagship', 'short1', 'short2', 'short3', 'companion'], [by_name[n] for n in names])))
+        elif lane == 'system-glitch':
+            if not {'script.txt', 'scene_plan.txt'}.issubset(by_name): raise validators.QualityGateError('Glitch package incomplete')
+            validators.glitch_gate(script=by_name['script.txt'], scene_plan=by_name['scene_plan.txt'])
+        else:
+            raise NotImplementedError('No certified completion gate for this lane')
+        for p in paths: validators.require_non_empty(p)
+        available = set(drive_storage.list_outputs(content_id))
+        if not set(paths).issubset({p.resolve() for p in available}): raise validators.QualityGateError('Storage inventory mismatch')
+        # The bundled Drive helper is local-only. No receipt flag can masquerade as a provider readback.
+        if drive_verifier is None: raise RuntimeError('Real Drive upload/readback adapter required; local-only completion remains draft')
+        if drive_verifier(content_id, paths) is not True: raise RuntimeError('Drive verification failed')
+        _append(run_id, content_id=content_id, lane=lane, status=status, files=[str(p) for p in paths])
+        claim_file(content_id).unlink()
+    print(f'{status}: {content_id}')
 
-
-def start_lane(lane: str, content_id: str) -> Handoff:
-    """Claim handoff and mark WRITING_IN_PROGRESS."""
-    assert_open_stack()
-    ensure_dirs()
-    h = claim(content_id, lane)
-    run_id = h.run_id
-    prev = last_status(run_id, content_id)
-    if prev in ("WRITING_COMPLETE", "RENDER_PENDING", "VIDEO_QA_PASSED", "RELEASE_APPROVED"):
-        print(f"Already past writing for {content_id} (status={prev}). Resuming carefully.")
-    append_event(
-        run_id,
-        content_id=content_id,
-        lane=lane,
-        status="WRITING_IN_PROGRESS",
-    )
-    return h
-
-
-def mark_complete(
-    run_id: str,
-    content_id: str,
-    lane: str,
-    files: list[str],
-    status: str = "WRITING_COMPLETE",
-) -> None:
-    append_event(
-        run_id,
-        content_id=content_id,
-        lane=lane,
-        status=status,
-        files=files,
-    )
-    print(f"{status}: {content_id} ({len(files)} files)")
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description="REBOOTv2 base runner")
-    parser.add_argument("command", choices=["doctor", "claim"])
-    parser.add_argument("--lane", default="")
-    parser.add_argument("--content-id", default="")
-    args = parser.parse_args()
-
-    if args.command == "doctor":
-        doctor()
-    elif args.command == "claim":
-        if not args.lane or not args.content_id:
-            raise SystemExit("--lane and --content-id required")
+def main():
+    p = argparse.ArgumentParser(description='Hub writing tools; no publication')
+    p.add_argument('command', choices=['doctor', 'claim', 'abandon'])
+    p.add_argument('--lane', default=''); p.add_argument('--content-id', default=''); p.add_argument('--claim-token', default='')
+    args = p.parse_args()
+    if args.command == 'doctor': doctor()
+    elif args.command == 'claim':
         h = start_lane(args.lane, args.content_id)
-        print(h.to_dict())
-
-
-if __name__ == "__main__":
-    main()
+        print(h.to_dict()); print('CLAIM_TOKEN=' + h.claim_token)
+    else: abandon_claim(args.content_id, args.lane, args.claim_token)
+if __name__ == '__main__': main()

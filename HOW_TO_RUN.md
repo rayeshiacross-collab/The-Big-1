@@ -29,7 +29,7 @@ cp .env.example .env
 python -m src.runner doctor
 ```
 
-Must report reachable before any real work.
+Must report reachable **and** an exact `OK` reply before any claim. Use a loopback IP, with explicit `LOCAL_MODEL_PROTOCOL=ollama` or `openai`. Config is loaded from `config/runner.yaml`; environment variables override model/path settings.
 
 ## 4. Claim a handoff (after DC creates one)
 
@@ -40,11 +40,17 @@ python -m src.runner claim --lane psychology --content-id psych-20261022-autonom
 ## 5. What the skeleton already does
 
 - Loads open-stack config
-- Refuses paid APIs by default
+- Refuses paid APIs and non-loopback model endpoints
 - Append-only ledger
-- Handoff load/claim
+- Validated immutable handoffs and persistent exclusive claims
 - Local model chat helper
-- Quality-gate helpers
+- Wired completion gates; missing real Drive verifier fails closed
 - Local file save (Drive upload stubbed)
 
 Lane-specific writing logic still lives in the five private repos / Hermes skills. This skeleton is the shared backbone.
+
+## Tests and operational limits
+
+Run `python -m unittest discover -s tests -v`. See HARDENING.md before integrating a lane. The manual Action only runs a doctor on an explicitly labeled self-hosted `hub-local` runner; without one it queues and cannot test a model. No hosted runner can access your laptop loopback. No workflow was dispatched as part of the patch. Claims must use persistent local storage, not ephemeral Actions workspaces.
+
+Do not register a new runner or expose a model publicly just to satisfy the workflow. Local CLI operation is supported without a runner. Windows timezone data is included; Windows runtime behavior still needs testing on Windows.

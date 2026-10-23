@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from .config import OUTPUT_PATH, ensure_dirs
+from .safety import content_id as valid_content, confined
+from .ledger import storage_lock
 
 
 def save_text(
@@ -21,17 +23,23 @@ def save_text(
     subfolder: str = "",
 ) -> Path:
     ensure_dirs()
-    folder = OUTPUT_PATH / content_id
+    folder = confined(OUTPUT_PATH, valid_content(content_id))
     if subfolder:
-        folder = folder / subfolder
+        folder = confined(folder, subfolder)
     folder.mkdir(parents=True, exist_ok=True)
-    path = folder / filename
-    path.write_text(text, encoding="utf-8")
+    path = confined(folder, filename)
+    with storage_lock():
+        if path.exists():
+            if path.read_text(encoding="utf-8") != text:
+                raise FileExistsError("Existing output differs; preserve it and review revisions explicitly")
+        else:
+            with path.open("x", encoding="utf-8") as f:
+                f.write(text)
     return path
 
 
 def list_outputs(content_id: str) -> list[Path]:
-    folder = OUTPUT_PATH / content_id
+    folder = confined(OUTPUT_PATH, valid_content(content_id))
     if not folder.exists():
         return []
     return sorted(p for p in folder.rglob("*") if p.is_file())

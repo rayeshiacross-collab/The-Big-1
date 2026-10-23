@@ -1,5 +1,7 @@
 # End-to-End Dry Run (Reference)
 
+Design reference, not a completed farm integration. See HARDENING.md for implemented gates and missing adapters.
+
 **Example subject:** “Why a promotion can feel like a loss when it costs autonomy, evenings, and caregiving capacity”
 
 ## 1. Master Research (DC) — 06:00 CT
@@ -33,7 +35,7 @@ Skills: `hypit-packaging` → `video-from-script` → `hypit-quality-gate`
 
 Produces:
 - Titles, description, keywords, pinned comment
-- Thumbnail concepts (approved cyborg only)
+- Thumbnail concepts (cyberpunk motion graphics; no host / no cyborg)
 - Full scene-by-scene video production package (open tools only)
 
 Status → `RENDER_PENDING`

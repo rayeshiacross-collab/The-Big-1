@@ -9,6 +9,7 @@ paths:
   output: ./output
 
 model:
+  protocol: ollama
   base_url: http://127.0.0.1:11434
   name: llama3.1:8b-instruct-q5_K_M
   large: ""
@@ -23,3 +24,10 @@ status_vocabulary:
   - RENDER_PENDING
   - VIDEO_QA_PASSED
   - RELEASE_APPROVED
+
+quality:
+  flagship_min_words: 1300
+  flagship_max_words: 1500
+  short_min_words: 40
+  companion_min_words: 130
+  banned_terms: []

@@ -5,6 +5,8 @@
 This is the big one.  
 One farm. Five workers. Hermes + open-source only. Nothing ships without you.
 
+This repository is a hardened shared skeleton, not a running farm. No publisher, release-approval command, real Drive adapter, renderer or lane-specific generator is implemented here. See [HARDENING.md](./HARDENING.md) for tested scope and recovery instructions.
+
 ## The Five Lanes
 
 | Lane | Repo | Job |
