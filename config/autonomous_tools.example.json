@@ -1,0 +1,8 @@
+{
+  "hermes_executable": "hermes",
+  "model": "CONFIGURE_INSTALLED_LOCAL_TOOL_CAPABLE_MODEL",
+  "model_base_url": "http://127.0.0.1:11434/v1",
+  "local_tools": [],
+  "timeout_seconds": 3600,
+  "max_repair_attempts": 2
+}

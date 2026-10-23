@@ -156,7 +156,10 @@ class HubTests(unittest.TestCase):
         self.assertEqual(len(rows),1);self.assertEqual(rows[0]['operation'],'claim');self.assertEqual(rows[0]['result'],'FAILED')
         events=[json.loads(s) for s in usage_path().read_text().splitlines()]
         self.assertEqual(len(events),4)
-        self.assertEqual(events[0]['local_time'][-6:], '-05:00')
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        expected=datetime.fromisoformat(events[0]['timestamp']).astimezone(ZoneInfo(config.TZ)).isoformat()
+        self.assertEqual(events[0]['local_time'],expected)
         self.assertEqual(len({e['execution_id'] for e in events}),1)
     def test_machine_ledger_logs_no_secrets_and_preserves_attempts(self):
         from src.machine_usage import tracked, recent_runs, usage_path

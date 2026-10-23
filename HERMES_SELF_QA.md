@@ -32,4 +32,4 @@ Evidence should identify timestamps/segments, observations and actual technical 
 
 Save defects, fixes, new hashes and the final report with the project ledger. A self-QA pass never sets human release approval or publishes anything. If a scene or check fails, fix it and repeat review of the affected material and final assembled video.
 
-Current state: these gates are part of the open hardening PR. No Hermes runtime, finished-video review or public release is claimed by adding this policy.
+Current state: the original hardening gates are merged. The autonomous video entrypoint calls the video gate and requires full-duration, hash-bound video/audio perception-tool receipts. Hermes must generate its own scenes from the narration script, not reuse operator-authored shot plans. No live Hermes generation, finished-video review or public release is claimed merely by adding this policy.

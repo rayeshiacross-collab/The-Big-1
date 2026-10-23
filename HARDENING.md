@@ -37,3 +37,9 @@ Feeding six existing Psychology Shorts exposed a missing standalone completion p
 ## Owner-required Hermes self-QA
 
 Added a mandatory hash-bound Hermes writing review to the completion path and a finished-video review validator requiring all nine checks and full video/audio playback attestations. Missing/stale/failed review leaves the item in progress. HERMES_SELF_QA.md gives the actual review and fix/recheck procedure. The gate validates evidence structure, not perception or reviewer authentication; actual Hermes execution and final-video integration remain outstanding. All 19 regression tests pass, including missing/stale review rejection and full-playback/video-check requirements.
+
+## Autonomous script-only production correction
+
+The Psychology lane was still a stub after the original controls were merged. Added a real Hermes one-shot producer invocation, source-only input contract, generated-plan and seven-artifact validation, real FFmpeg temporal/decode checks, registered full-video/full-audio review evidence and a bounded repair loop. The lane wrapper and Harvest script-only queue are wired to this entrypoint; legacy hand-authored scene jobs are not inputs. Actual usage is recorded automatically with the machine.
+
+Validation: 32 regression tests pass locally, including real encoded/decoded synthetic media and a simulated-agent repair sequence. Compileall and pip check pass. Synthetic tool-review receipts are test fixtures, not real perception. A real first-Short attempt stopped at preflight because Hermes is not installed; no videos were produced, reviewed, uploaded or published. Models, local render/speech/perception tools and a persistent worker remain runtime prerequisites. The implementation does not register or deploy a worker and does not claim that a background render is running.
