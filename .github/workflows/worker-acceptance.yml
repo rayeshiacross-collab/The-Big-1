@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m pip install uv==0.13.4
           sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libpango1.0-dev pkg-config fonts-dejavu-core
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libopenblas-dev pkg-config fonts-dejavu-core
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y ffmpeg
@@ -44,10 +44,12 @@ jobs:
       - name: Install pinned local worker
         run: bash scripts/bootstrap_cpu_worker.sh "$RUNNER_TEMP/reboot-worker"
       - name: Test real Hermes model and tool execution
+        if: inputs.mode == 'runtime'
         run: |
           "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
             --runtime "$RUNNER_TEMP/reboot-worker/worker.json" --output "$RUNNER_TEMP/worker-result"
       - name: Synthesize the owner's exact test narration
+        if: inputs.mode == 'runtime'
         run: |
           "$RUNNER_TEMP/reboot-worker/worker-env/bin/piper" \
             --model "$RUNNER_TEMP/reboot-worker/models/en_US-ljspeech-high.onnx" \

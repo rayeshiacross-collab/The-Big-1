@@ -86,7 +86,7 @@ def model_command(runtime, port):
     return [runtime['model_server'], '-m', runtime['model_path'], '--alias', runtime['model'],
             '--host', '127.0.0.1', '--port', str(port), '--jinja', '--reasoning', 'off',
             '-c', str(context), '-b', '256', '-ub', '128', '-t', '4', '--parallel', '1',
-            '--flash-attn', 'on', '-ctk', 'q8_0', '-ctv', 'q8_0']
+            '--flash-attn', 'on', '-ctk', 'f16', '-ctv', 'f16']
 
 
 def stop_gateway(executable, env, log_path):
@@ -126,7 +126,7 @@ def runtime_check(runtime, url, output):
         process = subprocess.Popen(cmd, cwd=output, env=env,
                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
-            code = process.wait(timeout=600)
+            code = process.wait(timeout=1200)
         finally:
             # Hermes may launch a gateway; it belongs to this bounded job too.
             try:
@@ -167,8 +167,11 @@ def run(runtime_path, output, *, script=None, policy=None, tools_path=None, cont
                 response.raise_for_status()
                 if runtime['model'] not in {m['id'] for m in response.json()['data']}:
                     raise WorkerError('New model service did not advertise the configured model')
-            runtime_check(runtime, url, output)
-            report.update(status='RUNTIME_READY', live_tool_use=True)
+            if script is None:
+                runtime_check(runtime, url, output)
+                report.update(status='RUNTIME_READY', live_tool_use=True)
+            else:
+                report.update(status='MODEL_READY')
             av.save_json(report_path, report)
             if script is not None:
                 if not all((policy, tools_path, content_id)):

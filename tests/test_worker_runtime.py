@@ -9,7 +9,7 @@ class WorkerRuntimeTests(unittest.TestCase):
         argv = worker.model_command(runtime, 23456)
         self.assertEqual(argv[argv.index('-c')+1], '65536')
         self.assertEqual(argv[argv.index('--port')+1], '23456')
-        self.assertEqual(argv[argv.index('-ctk')+1], 'q8_0')
+        self.assertEqual(argv[argv.index('-ctk')+1], 'f16')
         runtime['context_tokens'] = 16384
         with self.assertRaisesRegex(worker.WorkerError, '64000'):
             worker.model_command(runtime, 23456)

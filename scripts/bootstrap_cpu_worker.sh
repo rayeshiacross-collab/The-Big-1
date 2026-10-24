@@ -22,7 +22,7 @@ uv pip install --python "$root/worker-env/bin/python" -r "$repo/requirements.txt
 export PATH="$root/worker-env/bin:$PATH"
 worker_checkout https://github.com/ggml-org/llama.cpp.git "$root/llama.cpp" "$llama_sha"
 cmake -S "$root/llama.cpp" -B "$root/llama.cpp/build" -G Ninja \
-  -DGGML_CUDA=OFF -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF \
+  -DGGML_CUDA=OFF -DGGML_NATIVE=ON -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS -DLLAMA_CURL=OFF \
   -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=ON \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build "$root/llama.cpp/build" --target llama-server -j 4
