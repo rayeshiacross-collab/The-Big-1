@@ -43,3 +43,7 @@ This repository provides hardened shared controls and a [script-only Hermes prod
 ---
 
 *Built with Hermes. Runs on open tools. You hold the gate.*
+
+## Research and assigned writing
+
+The completed shared text entrypoint is `python -m src.text_rotation`. See [TEXT_ROTATION.md](docs/TEXT_ROTATION.md) for frozen evidence inputs, real Drive readback, complete lane packages, runtime checks and resume behavior. It processes an existing batch and never publishes.
