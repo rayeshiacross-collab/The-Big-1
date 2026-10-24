@@ -6,11 +6,13 @@ Architecture: install official pinned Hermes, llama.cpp and an integrity-checked
 
 Execution: inline, as directed by the owner to build and run the machine.
 
-- [ ] Add and verify tests for service readiness, early process failure, timeout cleanup and missing tool-use proof.
-- [ ] Implement managed local inference and a live Hermes tool-use acceptance command.
-- [ ] Add reproducible Linux bootstrap, manual worker workflow and source-specific acceptance input.
-- [ ] Run local regression checks, review changes, save a repair branch/PR and execute the Linux acceptance job.
+- [x] Add and verify tests for service readiness, early process failure, timeout cleanup and missing tool-use proof.
+- [x] Implement managed local inference and a live Hermes tool-use acceptance command.
+- [x] Add reproducible Linux bootstrap, manual worker workflow and source-specific acceptance input.
+- [x] Run local regression checks, review changes, save a repair branch/PR and execute the Linux acceptance job.
 
 Constraints: existing production validation stays unchanged; missing full audio/video perception remains blocking. Standard public-repository Linux runner only; no larger/GPU paid runner. Read-only workflow permissions. No inherited secrets in Hermes or inference subprocesses. Runtime acceptance does not mean production-video acceptance.
 
 Ruling: use a new branch in this task-owned checkout; preserve untracked production-test evidence and all existing files.
+
+Verification: 45 local tests passed; shell syntax and whitespace checks passed. Fresh reviewer identified and fixes addressed fresh-clone refusal, invalid readiness URL, detached gateway cleanup and port collision. First live Linux run exposed Hermes's 64,000-token context minimum; configuration now uses the 262,144-context Qwen3-4B-Instruct-2507 model with a 65,536-token server window. Second Linux run 40077065924 passed live Hermes tool use and exact-script speech synthesis. Full video rendering/perception remains outside this completed runtime slice and is still unfinished.

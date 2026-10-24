@@ -32,7 +32,21 @@ The bootstrap registers real Piper and FFmpeg executables. It does **not** claim
 
 The manual `production` mode also calls the production command with unchanged gates. It is expected to fail while full-review capabilities remain absent. The automatically triggered branch acceptance uses `runtime` mode only. If the repository becomes private, re-evaluate the account's Actions billing before running this workflow.
 
-## Source identity
+## Verified Linux execution — 2026-10-24
+
+Run https://github.com/rayeshiacross-collab/The-Big-1/actions/runs/40077065924 passed on commit `812fe9e1054330848bf0853e5cb00e49ece4cd50`.
+
+- Fresh installation passed.
+- Local model-backed Hermes created and read the random tool-proof file.
+- Scoped gateway shutdown passed.
+- The exact narration synthesized and fully decoded; measured audio duration: 119.524717 seconds.
+- Retained worker status: `RUNTIME_READY`, `live_tool_use: true`, `production_video_complete: false`, `published: false`.
+- Full production step was skipped in runtime mode. No MP4 was generated and no semantic full-playback review was performed.
+- All 45 Python regression tests passed locally and the branch's GitHub regression checks passed.
+
+The first Linux run failed because the earlier model server exposed only 16,384 context tokens. That attempt is retained separately and was corrected by the long-context model configuration above.
+
+## Narration source
 
 The narration is extracted verbatim from the eight VOICEOVER sections of "Dark Psychology for High Intelligence: The Mind Games Most People Never See". Source: https://drive.google.com/file/d/1sJXFLjvYzefCpI6iE1N3UaQF6DQaFxvf/view
 
