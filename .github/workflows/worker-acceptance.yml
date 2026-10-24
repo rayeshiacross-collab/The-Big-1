@@ -14,6 +14,7 @@ on:
       - '.github/workflows/worker-acceptance.yml'
       - 'src/worker_runtime.py'
       - 'src/autonomous_video.py'
+      - 'scripts/media_assembly.py'
       - 'scripts/bootstrap_cpu_worker.sh'
 permissions:
   contents: read

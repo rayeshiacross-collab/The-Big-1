@@ -45,7 +45,7 @@ download "$voice_base/en_US-ljspeech-high.onnx.json" "$root/models/en_US-ljspeec
 curl --fail --location --retry 2 "$voice_base/MODEL_CARD" -o "$root/models/ljspeech_MODEL_CARD"
 curl --fail --location --retry 2 https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/raw/main/LICENSE -o "$root/models/QWEN_LICENSE"
 
-"$root/worker-env/bin/python" - "$root" "$hermes_sha" "$llama_sha" <<'PY'
+"$root/worker-env/bin/python" - "$root" "$hermes_sha" "$llama_sha" "$repo" <<'PY'
 import json,sys
 from pathlib import Path
 r=Path(sys.argv[1])
@@ -55,7 +55,9 @@ runtime=dict(hermes_executable=str(r/'hermes-agent/.venv/bin/hermes'),model_serv
              hermes_commit=sys.argv[2],llama_commit=sys.argv[3])
 (r/'worker.json').write_text(json.dumps(runtime,indent=2)+'\n')
 tools=dict(hermes_executable=runtime['hermes_executable'],model=runtime['model'],model_base_url='http://127.0.0.1:11434/v1',
- local_tools=[dict(name='piper',executable=runtime['piper'],args=['--model',runtime['voice_path']],capability='speech',license='Piper GPL-3.0; LJ Speech dataset public domain'),
+ local_tools=[dict(name='assembly-helper',executable=str(r/'worker-env/bin/python'),args=[str(Path(sys.argv[4])/'scripts/media_assembly.py')],capability='render',license='Project orchestration; Piper GPL-3.0; Manim MIT'),
+              dict(name='python-with-manim-pillow-numpy',executable=str(r/'worker-env/bin/python'),args=[],capability='code',license='Python PSF; Manim MIT; Pillow HPND; NumPy BSD'),
+              dict(name='piper',executable=runtime['piper'],args=['--model',runtime['voice_path']],capability='speech',license='Piper GPL-3.0; LJ Speech dataset public domain'),
               dict(name='manim',executable=str(r/'worker-env/bin/manim'),args=['--renderer','cairo'],capability='render',license='MIT'),
               dict(name='ffmpeg',executable='/usr/bin/ffmpeg',args=[],capability='render',license='GPL, installed distribution')],
  timeout_seconds=3600,max_repair_attempts=1)

@@ -105,6 +105,25 @@ AND editable SRT, thumbnail and metadata. Do not substitute still panels, black-
 slides or a camera zoom for meaningful subject/object movement. If a needed tool,
 model, license or capability is missing, write blocked.json and stop; never simulate.
 
+If and only if assembly-helper is in the tool manifest, this recipe applies.
+Otherwise use the actual configured tools and their documented capabilities.
+The installed tools are composable command-line programs, not a one-click video
+service. You must write the scene code yourself. An all-in-one generator is NOT
+required. The configured Python interpreter includes Manim, Pillow and NumPy.
+When assembly-helper is available, run its executable plus args with --help first,
+then its speech subcommand using input_script.txt and the configured Piper model.
+It creates narration.wav, exact captions.srt, narration.txt and timing.json.
+Read timing.json. Independently author your own Manim Scene.construct Python code
+and animate meaningful objects for those measured intervals. Use Manim Text,
+not Tex/MathTex (LaTeX is not installed). Run the configured manim executable
+with --renderer cairo --resolution WIDTH,HEIGHT --fps FPS --media_dir media
+--output_file visual.mp4 YOUR_CODE.py YOUR_SCENE_CLASS. Match total duration to
+timing.json. Write your own hermes_plan.json and youtube.json. Then use
+assembly-helper encode --visual ACTUAL_RENDER_PATH --thumbnail-at YOUR_CHOSEN_TIME
+--content-id CONTENT_ID. This helper burns captions, muxes audio, extracts your
+selected thumbnail and writes the manifest; it does not invent scenes or copy.
+Inspect actual --help and command errors before declaring a capability missing.
+
 Create production_manifest.json: content_id, source_sha256, files mapping video to
 final.mp4, audio to narration.wav, captions to captions.srt, thumbnail to thumbnail.jpg,
 metadata to youtube.json, plan to hermes_plan.json, narration to narration.txt.
