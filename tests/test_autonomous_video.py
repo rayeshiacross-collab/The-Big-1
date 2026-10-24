@@ -60,6 +60,32 @@ class ContractTests(unittest.TestCase):
         self.assertIn('Creative input is input_script.txt ONLY',p)
         for old in ('hourglass','phone face down','empty chair','loyalty test'):
             self.assertNotIn(old,p)
+    def test_staged_authoring_uses_file_tools_without_cli_handoff(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);(root/'input_script.txt').write_text(SCRIPT)
+            registry=[dict(name='assembly-helper',executable='python',args=['media.py']),dict(name='piper',args=['--model','voice.onnx'])]
+            with patch.object(av.subprocess,'run',return_value=Mock(returncode=0)) as run:
+                av.invoke('hermes','http://127.0.0.1/v1',dict(model='local',local_tools=registry),'Write scene files',root,file_only=True)
+            args=run.call_args.args[0]
+            self.assertEqual(args[args.index('--toolsets')+1],'file')
+            self.assertNotIn('EXECUTION HANDOFF',(root/'request.txt').read_text())
+    def test_prepared_speech_respects_locked_voice(self):
+        tools={'local_tools':[dict(name='assembly-helper',executable='python'),dict(name='piper',args=['--model','voice.onnx'])]}
+        with tempfile.TemporaryDirectory() as t,patch.object(av,'media_step') as step:
+            with self.assertRaisesRegex(av.ProductionError,'locked voice'):
+                av.prepare_assembly(Path(t),tools,POLICY)
+            step.assert_not_called()
+    def test_render_requires_hermes_files_before_running_any_command(self):
+        with tempfile.TemporaryDirectory() as t,patch.object(av,'media_step') as step:
+            with self.assertRaisesRegex(av.ProductionError,'Hermes did not write scene.py'):
+                av.render_assembly(Path(t),{},POLICY,CID)
+            step.assert_not_called()
+    def test_mechanical_timeout_becomes_repairable_error_with_log(self):
+        with tempfile.TemporaryDirectory() as t,patch.object(av.subprocess,'run',side_effect=subprocess.TimeoutExpired(['manim'],1)):
+            root=Path(t)
+            with self.assertRaisesRegex(av.ProductionError,'timed out'):
+                av.media_step(root,['manim'],timeout=1)
+            self.assertIn('timed out',(root/'mechanical.log').read_text())
     def test_remote_endpoints_rejected(self):
         for url in ('http://example.com','https://127.0.0.1','http://127.0.0.1@evil.test','http://127.0.0.1/?x=1'):
             with self.assertRaises(av.ProductionError): av.endpoint(url)
@@ -121,6 +147,23 @@ class MediaTests(unittest.TestCase):
         self.assertTrue(doctor.call_args.kwargs['assembly_only'])
         self.assertEqual(report['status'],'ASSEMBLED_NOT_REVIEWED')
         self.assertTrue(list((cfg/'out').rglob('assembly_report.json')))
+        self.assertFalse(list((cfg/'out').rglob('verified_delivery.json')))
+
+    def test_staged_render_failure_reaches_hermes_repair_and_stays_unreviewed(self):
+        cfg=self.root/'staged_cfg';cfg.mkdir();(cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY)
+        registry=[dict(name=name) for name in ('assembly-helper','piper','manim')]
+        dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',local_tools=registry,max_repair_attempts=1))
+        timing=dict(duration=2,voice=POLICY['voice'],paragraphs=[dict(text=SCRIPT,start=0,end=2,duration=2)])
+        calls=[]
+        def author(exe,url,tools,prompt,folder,**kwargs):
+            self.assertTrue(kwargs['file_only']);calls.append(prompt)
+        def render(folder,*args):
+            if folder.name=='attempt_00':raise av.ProductionError('Mechanical command timed out after 600 seconds: manim')
+            fixture(folder);(folder/'self_qa.json').unlink()
+        with patch.dict(os.environ,MACHINE_LEDGER_PATH=str(cfg/'machine.jsonl')),patch.object(av,'doctor',return_value=('fixture','http://127.0.0.1/v1')),patch.object(av,'prepare_assembly',return_value=timing),patch.object(av,'invoke',side_effect=author),patch.object(av,'render_assembly',side_effect=render):
+            result=av.produce(CID,cfg/'script.txt',cfg/'policy.json',cfg/'tools.json',output=cfg/'out',assembly_only=True)
+        self.assertEqual(len(calls),2);self.assertIn('timed out',calls[1])
+        self.assertEqual(result['status'],'ASSEMBLED_NOT_REVIEWED')
         self.assertFalse(list((cfg/'out').rglob('verified_delivery.json')))
 
     def test_real_fixture_package_and_all_artifacts(self):

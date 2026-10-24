@@ -60,7 +60,7 @@ tools=dict(hermes_executable=runtime['hermes_executable'],model=runtime['model']
               dict(name='piper',executable=runtime['piper'],args=['--model',runtime['voice_path']],capability='speech',license='Piper GPL-3.0; LJ Speech dataset public domain'),
               dict(name='manim',executable=str(r/'worker-env/bin/manim'),args=['--renderer','cairo'],capability='render',license='MIT'),
               dict(name='ffmpeg',executable='/usr/bin/ffmpeg',args=[],capability='render',license='GPL, installed distribution')],
- timeout_seconds=3600,max_repair_attempts=1)
+ timeout_seconds=2700,max_repair_attempts=1)
 (r/'media-tools.json').write_text(json.dumps(tools,indent=2)+'\n')
 print('Installed runtime manifest:',r/'worker.json')
 print('Full playback review tools are not installed or represented by this bootstrap.')

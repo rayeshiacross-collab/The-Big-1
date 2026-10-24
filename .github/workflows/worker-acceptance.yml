@@ -62,7 +62,7 @@ jobs:
       - name: Assemble real video with Hermes
         if: github.event_name == 'push' || inputs.mode == 'assembly'
         run: |
-          "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
+          timeout --signal=TERM --kill-after=30s 150m "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
             --runtime "$RUNNER_TEMP/reboot-worker/worker.json" \
             --output "$RUNNER_TEMP/worker-result/assembly" \
             --content-id psych-20261024-dark-psychology-test \
