@@ -79,6 +79,16 @@ def free_loopback_port():
         return sock.getsockname()[1]
 
 
+def model_command(runtime, port):
+    context = runtime.get('context_tokens', 0)
+    if type(context) is not int or context < 64000:
+        raise WorkerError('Hermes requires at least 64000 model context tokens')
+    return [runtime['model_server'], '-m', runtime['model_path'], '--alias', runtime['model'],
+            '--host', '127.0.0.1', '--port', str(port), '--jinja', '--reasoning', 'off',
+            '-c', str(context), '-b', '256', '-ub', '128', '-t', '4', '--parallel', '1',
+            '--flash-attn', 'on', '-ctk', 'q8_0', '-ctv', 'q8_0']
+
+
 def stop_gateway(executable, env, log_path):
     with log_path.open('w', encoding='utf-8') as log:
         result = subprocess.run([executable, '--profile', 'default', 'gateway', 'stop', '--yes'],
@@ -148,9 +158,7 @@ def run(runtime_path, output, *, script=None, policy=None, tools_path=None, cont
         socket_check()
         port = free_loopback_port()
         url = f'http://127.0.0.1:{port}/v1'
-        argv = [runtime['model_server'], '-m', runtime['model_path'], '--alias', runtime['model'],
-                '--host', '127.0.0.1', '--port', str(port), '--jinja', '--reasoning', 'off',
-                '-c', '16384', '-b', '256', '-ub', '128', '-t', '4', '--parallel', '1']
+        argv = model_command(runtime, port)
         with managed_service(argv, url+'/models', output/'model-server.log',
                              env=av.isolated_env(output/'model-home')):
             with requests.Session() as session:

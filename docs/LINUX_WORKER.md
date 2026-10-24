@@ -2,7 +2,7 @@
 
 The repository now has an installable, bounded Linux execution path. This is a CPU worker runtime, not a provisioned GPU farm or a completed video.
 
-`scripts/bootstrap_cpu_worker.sh /absolute/runtime` installs pinned official Hermes and llama.cpp, checks model/voice downloads against SHA-256 values, and writes `worker.json` plus a media-tool manifest. It requires git, curl, GCC/G++, FFmpeg, ffprobe and uv 0.13.4. The model is Qwen3-4B Q4_K_M (Apache-2.0); the optional Piper voice uses the public-domain LJ Speech dataset. Licenses stay with the installation.
+`scripts/bootstrap_cpu_worker.sh /absolute/runtime` installs pinned official Hermes and llama.cpp, checks model/voice downloads against SHA-256 values, and writes `worker.json` plus a media-tool manifest. It requires git, curl, GCC/G++, FFmpeg, ffprobe and uv 0.13.4. The model is Qwen3-4B-Instruct-2507 Q4_K_M (Apache-2.0, Unsloth GGUF conversion of the official Qwen model), served with 65,536 context tokens and quantized KV caches. Hermes requires at least 64,000 tokens; this model's native context is 262,144. The optional Piper voice uses the public-domain LJ Speech dataset. Licenses stay with the installation.
 
 Run a live model-backed tool-use acceptance test:
 

@@ -4,6 +4,16 @@ from src import worker_runtime as worker
 
 
 class WorkerRuntimeTests(unittest.TestCase):
+    def test_model_command_meets_hermes_context_floor(self):
+        runtime = dict(model_server='server', model_path='weights', model='fixture', context_tokens=65536)
+        argv = worker.model_command(runtime, 23456)
+        self.assertEqual(argv[argv.index('-c')+1], '65536')
+        self.assertEqual(argv[argv.index('--port')+1], '23456')
+        self.assertEqual(argv[argv.index('-ctk')+1], 'q8_0')
+        runtime['context_tokens'] = 16384
+        with self.assertRaisesRegex(worker.WorkerError, '64000'):
+            worker.model_command(runtime, 23456)
+
     def test_gateway_stop_is_scoped_and_failure_blocks(self):
         import os
         with tempfile.TemporaryDirectory() as tmp:
