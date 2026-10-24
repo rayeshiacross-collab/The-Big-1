@@ -74,6 +74,10 @@ jobs:
             date -u
             find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 -type f \
               -not -path '*/isolated-home/*' -printf '%P %s bytes\n' 2>/dev/null || true
+            find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 \
+              -name validation_failure.json -exec cat {} \; 2>/dev/null || true
+            find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 \
+              -name hermes.log -exec tail -c 2000 {} \; 2>/dev/null || true
             sleep 30
           done
           wait "$worker_pid"

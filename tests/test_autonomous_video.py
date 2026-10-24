@@ -43,6 +43,18 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs['env']['TERMINAL_CWD'],str(root))
             self.assertIn(str(root/'input_script.txt'),(root/'request.txt').read_text())
 
+    def test_cli_handoff_preserves_quoted_paths_and_source(self):
+        with tempfile.TemporaryDirectory(prefix='media space ') as t:
+            root=Path(t);(root/'input_script.txt').write_text(SCRIPT)
+            registry=[dict(name='assembly-helper',executable='/runtime path/python',args=['/repo path/media.py']),dict(name='piper',args=['--model','/voice path/model.onnx'])]
+            with patch.object(av.subprocess,'run',return_value=Mock(returncode=0)):
+                av.invoke('hermes','http://127.0.0.1/v1',dict(model='local',local_tools=registry),'fixture request',root)
+            request=(root/'request.txt').read_text()
+            command=next(line for line in request.splitlines() if '/runtime path/python' in line)
+            self.assertEqual(av.shlex.split(command),['/runtime path/python','/repo path/media.py','speech','--script',str(root/'input_script.txt'),'--voice','/voice path/model.onnx'])
+            self.assertIn('<source_narration>\n'+SCRIPT,request)
+            self.assertIn('Do NOT call tool_describe on assembly-helper',request)
+
     def test_no_scene_suggestions_in_initial_request(self):
         p=av.request_text(CID,'digest',POLICY,{'local_tools':[]})
         self.assertIn('Creative input is input_script.txt ONLY',p)
