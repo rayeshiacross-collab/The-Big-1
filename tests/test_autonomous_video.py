@@ -33,11 +33,59 @@ def fixture(folder,static=False):
     dump(folder/'self_qa.json',dict(reviewer='Hermes',content_id=CID,stage='video',reviewed_at='2026-10-22T23:30:00-05:00',verdict='PASS',unresolved_issues=[],watched_full_video=True,listened_full_audio=True,artifact_sha256={v:av.sha(folder/v) for v in mapping.values()},checks={k:dict(status='PASS',evidence='Synthetic test fixture only') for k in VIDEO_CHECKS},perception_evidence=perception))
 
 class ContractTests(unittest.TestCase):
+    def test_gateway_receives_explicit_attempt_directory(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            with patch.object(av.subprocess,'run',return_value=Mock(returncode=0)) as run:
+                av.invoke('hermes','http://127.0.0.1/v1',dict(model='local'), 'fixture request',root)
+            argv=run.call_args.args[0]
+            self.assertEqual(argv[argv.index('--in')+1],str(root))
+            self.assertEqual(run.call_args.kwargs['env']['TERMINAL_CWD'],str(root))
+            self.assertIn(str(root/'input_script.txt'),(root/'request.txt').read_text())
+
+    def test_cli_handoff_preserves_quoted_paths_and_source(self):
+        with tempfile.TemporaryDirectory(prefix='media space ') as t:
+            root=Path(t);(root/'input_script.txt').write_text(SCRIPT)
+            registry=[dict(name='assembly-helper',executable='/runtime path/python',args=['/repo path/media.py']),dict(name='piper',args=['--model','/voice path/model.onnx'])]
+            with patch.object(av.subprocess,'run',return_value=Mock(returncode=0)):
+                av.invoke('hermes','http://127.0.0.1/v1',dict(model='local',local_tools=registry),'fixture request',root)
+            request=(root/'request.txt').read_text()
+            command=next(line for line in request.splitlines() if '/runtime path/python' in line)
+            self.assertEqual(av.shlex.split(command),['/runtime path/python','/repo path/media.py','speech','--script',str(root/'input_script.txt'),'--voice','/voice path/model.onnx'])
+            self.assertIn('<source_narration>\n'+SCRIPT,request)
+            self.assertIn('Do NOT call tool_describe on assembly-helper',request)
+
     def test_no_scene_suggestions_in_initial_request(self):
         p=av.request_text(CID,'digest',POLICY,{'local_tools':[]})
         self.assertIn('Creative input is input_script.txt ONLY',p)
         for old in ('hourglass','phone face down','empty chair','loyalty test'):
             self.assertNotIn(old,p)
+    def test_staged_authoring_uses_file_tools_without_cli_handoff(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);(root/'input_script.txt').write_text(SCRIPT)
+            registry=[dict(name='assembly-helper',executable='python',args=['media.py']),dict(name='piper',args=['--model','voice.onnx'])]
+            with patch.object(av.subprocess,'run',return_value=Mock(returncode=0)) as run:
+                av.invoke('hermes','http://127.0.0.1/v1',dict(model='local',local_tools=registry),'Write scene files',root,file_only=True)
+            args=run.call_args.args[0]
+            self.assertEqual(args[args.index('--toolsets')+1],'file')
+            self.assertNotIn('EXECUTION HANDOFF',(root/'request.txt').read_text())
+    def test_prepared_speech_respects_locked_voice(self):
+        tools={'local_tools':[dict(name='assembly-helper',executable='python'),dict(name='piper',args=['--model','voice.onnx'])]}
+        with tempfile.TemporaryDirectory() as t,patch.object(av,'media_step') as step:
+            with self.assertRaisesRegex(av.ProductionError,'locked voice'):
+                av.prepare_assembly(Path(t),tools,POLICY)
+            step.assert_not_called()
+    def test_render_requires_hermes_files_before_running_any_command(self):
+        with tempfile.TemporaryDirectory() as t,patch.object(av,'media_step') as step:
+            with self.assertRaisesRegex(av.ProductionError,'Hermes did not write scene.py'):
+                av.render_assembly(Path(t),{},POLICY,CID)
+            step.assert_not_called()
+    def test_mechanical_timeout_becomes_repairable_error_with_log(self):
+        with tempfile.TemporaryDirectory() as t,patch.object(av.subprocess,'run',side_effect=subprocess.TimeoutExpired(['manim'],1)):
+            root=Path(t)
+            with self.assertRaisesRegex(av.ProductionError,'timed out'):
+                av.media_step(root,['manim'],timeout=1)
+            self.assertIn('timed out',(root/'mechanical.log').read_text())
     def test_remote_endpoints_rejected(self):
         for url in ('http://example.com','https://127.0.0.1','http://127.0.0.1@evil.test','http://127.0.0.1/?x=1'):
             with self.assertRaises(av.ProductionError): av.endpoint(url)
@@ -77,6 +125,47 @@ class MediaTests(unittest.TestCase):
     def setUp(self):
         self.t=tempfile.TemporaryDirectory();self.addCleanup(self.t.cleanup);self.root=Path(self.t.name)
         fixture(self.root)
+    def test_assembly_is_not_reviewed_delivery(self):
+        (self.root/'self_qa.json').unlink()
+        report=av.validate_assembly(self.root,CID,SCRIPT,POLICY)
+        self.assertEqual(report['status'],'ASSEMBLED_NOT_REVIEWED')
+        self.assertFalse(report['production_video_complete'])
+        with self.assertRaises(FileNotFoundError):
+            av.validate_package(self.root,CID,SCRIPT,POLICY,REGISTRY)
+
+    def test_assembly_orchestration_never_creates_verified_delivery(self):
+        cfg=self.root/'assembly_cfg';cfg.mkdir()
+        (cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY)
+        dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',max_repair_attempts=0))
+        def assemble(exe,url,tools,prompt,folder):
+            self.assertIn('ASSEMBLY CHECKPOINT',prompt)
+            self.assertNotIn('verdict PASS',prompt)
+            fixture(folder)
+            (folder/'self_qa.json').unlink()
+        with patch.dict(os.environ,MACHINE_LEDGER_PATH=str(cfg/'machine.jsonl')),patch.object(av,'doctor',return_value=('fixture','http://127.0.0.1/v1')) as doctor,patch.object(av,'invoke',side_effect=assemble):
+            report=av.produce(CID,cfg/'script.txt',cfg/'policy.json',cfg/'tools.json',output=cfg/'out',assembly_only=True)
+        self.assertTrue(doctor.call_args.kwargs['assembly_only'])
+        self.assertEqual(report['status'],'ASSEMBLED_NOT_REVIEWED')
+        self.assertTrue(list((cfg/'out').rglob('assembly_report.json')))
+        self.assertFalse(list((cfg/'out').rglob('verified_delivery.json')))
+
+    def test_staged_render_failure_reaches_hermes_repair_and_stays_unreviewed(self):
+        cfg=self.root/'staged_cfg';cfg.mkdir();(cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY)
+        registry=[dict(name=name) for name in ('assembly-helper','piper','manim')]
+        dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',local_tools=registry,max_repair_attempts=1))
+        timing=dict(duration=2,voice=POLICY['voice'],paragraphs=[dict(text=SCRIPT,start=0,end=2,duration=2)])
+        calls=[]
+        def author(exe,url,tools,prompt,folder,**kwargs):
+            self.assertTrue(kwargs['file_only']);calls.append(prompt)
+        def render(folder,*args):
+            if folder.name=='attempt_00':raise av.ProductionError('Mechanical command timed out after 600 seconds: manim')
+            fixture(folder);(folder/'self_qa.json').unlink()
+        with patch.dict(os.environ,MACHINE_LEDGER_PATH=str(cfg/'machine.jsonl')),patch.object(av,'doctor',return_value=('fixture','http://127.0.0.1/v1')),patch.object(av,'prepare_assembly',return_value=timing),patch.object(av,'invoke',side_effect=author),patch.object(av,'render_assembly',side_effect=render):
+            result=av.produce(CID,cfg/'script.txt',cfg/'policy.json',cfg/'tools.json',output=cfg/'out',assembly_only=True)
+        self.assertEqual(len(calls),2);self.assertIn('timed out',calls[1])
+        self.assertEqual(result['status'],'ASSEMBLED_NOT_REVIEWED')
+        self.assertFalse(list((cfg/'out').rglob('verified_delivery.json')))
+
     def test_real_fixture_package_and_all_artifacts(self):
         r=av.validate_package(self.root,CID,SCRIPT,POLICY,REGISTRY)
         self.assertEqual(r['status'],'READY_FOR_OWNER_INSPECTION');self.assertFalse(r['published'])

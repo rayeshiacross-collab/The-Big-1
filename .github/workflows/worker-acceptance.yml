@@ -1,0 +1,102 @@
+name: Linux worker acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Runtime acceptance or full existing production command
+        type: choice
+        options: [runtime, assembly, production]
+        default: runtime
+        required: true
+  push:
+    branches: [build/portable-production-worker-20261024]
+    paths:
+      - '.github/workflows/worker-acceptance.yml'
+      - 'src/worker_runtime.py'
+      - 'src/autonomous_video.py'
+      - 'scripts/media_assembly.py'
+      - 'scripts/bootstrap_cpu_worker.sh'
+permissions:
+  contents: read
+concurrency:
+  group: linux-worker-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  worker:
+    # Standard public-repository CPU VM. No larger/paid/GPU runner.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install bootstrap tools
+        run: |
+          python -m pip install uv==0.13.4
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libopenblas-dev pkg-config fonts-dejavu-core
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+      - name: Install pinned local worker
+        run: bash scripts/bootstrap_cpu_worker.sh "$RUNNER_TEMP/reboot-worker"
+      - name: Test real Hermes model and tool execution
+        if: inputs.mode == 'runtime'
+        run: |
+          "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
+            --runtime "$RUNNER_TEMP/reboot-worker/worker.json" --output "$RUNNER_TEMP/worker-result"
+      - name: Synthesize the owner's exact test narration
+        if: inputs.mode == 'runtime'
+        run: |
+          "$RUNNER_TEMP/reboot-worker/worker-env/bin/piper" \
+            --model "$RUNNER_TEMP/reboot-worker/models/en_US-ljspeech-high.onnx" \
+            --input-file examples/dark-psychology/narration.txt \
+            --output-file "$RUNNER_TEMP/worker-result/narration.wav"
+          ffmpeg -v error -xerror -i "$RUNNER_TEMP/worker-result/narration.wav" -f null -
+          ffprobe -v error -show_entries format=duration,size -of json \
+            "$RUNNER_TEMP/worker-result/narration.wav" > "$RUNNER_TEMP/worker-result/audio-probe.json"
+      - name: Assemble real video with Hermes
+        if: github.event_name == 'push' || inputs.mode == 'assembly'
+        run: |
+          timeout --signal=TERM --kill-after=30s 150m "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
+            --runtime "$RUNNER_TEMP/reboot-worker/worker.json" \
+            --output "$RUNNER_TEMP/worker-result/assembly" \
+            --content-id psych-20261024-dark-psychology-test \
+            --script examples/dark-psychology/narration.txt \
+            --policy examples/dark-psychology/policy.json \
+            --tools "$RUNNER_TEMP/reboot-worker/media-tools.json" --assembly-only &
+          worker_pid=$!
+          while kill -0 "$worker_pid" 2>/dev/null; do
+            date -u
+            find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 -type f \
+              -not -path '*/isolated-home/*' -printf '%P %s bytes\n' 2>/dev/null || true
+            find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 \
+              -name validation_failure.json -exec cat {} \; 2>/dev/null || true
+            find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 \
+              -name hermes.log -exec tail -c 2000 {} \; 2>/dev/null || true
+            sleep 30
+          done
+          wait "$worker_pid"
+      - name: Production attempt with unchanged review gates
+        if: inputs.mode == 'production'
+        run: |
+          "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
+            --runtime "$RUNNER_TEMP/reboot-worker/worker.json" \
+            --output "$RUNNER_TEMP/worker-result/full-attempt" \
+            --content-id psych-20261024-dark-psychology-test \
+            --script examples/dark-psychology/narration.txt \
+            --policy examples/dark-psychology/policy.json \
+            --tools "$RUNNER_TEMP/reboot-worker/media-tools.json"
+      - name: Preserve actual results and private attempt logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-worker-result-${{ github.run_id }}
+          path: ${{ runner.temp }}/worker-result
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
