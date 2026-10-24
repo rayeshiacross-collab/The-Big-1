@@ -5,7 +5,7 @@ on:
       mode:
         description: Runtime acceptance or full existing production command
         type: choice
-        options: [runtime, production]
+        options: [runtime, assembly, production]
         default: runtime
         required: true
   push:
@@ -13,6 +13,7 @@ on:
     paths:
       - '.github/workflows/worker-acceptance.yml'
       - 'src/worker_runtime.py'
+      - 'src/autonomous_video.py'
       - 'scripts/bootstrap_cpu_worker.sh'
 permissions:
   contents: read
@@ -23,7 +24,7 @@ jobs:
   worker:
     # Standard public-repository CPU VM. No larger/paid/GPU runner.
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,6 +35,8 @@ jobs:
       - name: Install bootstrap tools
         run: |
           python -m pip install uv==0.13.4
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev pkg-config fonts-dejavu-core
           if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y ffmpeg
@@ -53,6 +56,16 @@ jobs:
           ffmpeg -v error -xerror -i "$RUNNER_TEMP/worker-result/narration.wav" -f null -
           ffprobe -v error -show_entries format=duration,size -of json \
             "$RUNNER_TEMP/worker-result/narration.wav" > "$RUNNER_TEMP/worker-result/audio-probe.json"
+      - name: Assemble real video with Hermes
+        if: github.event_name == 'push' || inputs.mode == 'assembly'
+        run: |
+          "$RUNNER_TEMP/reboot-worker/worker-env/bin/python" -m src.worker_runtime \
+            --runtime "$RUNNER_TEMP/reboot-worker/worker.json" \
+            --output "$RUNNER_TEMP/worker-result/assembly" \
+            --content-id psych-20261024-dark-psychology-test \
+            --script examples/dark-psychology/narration.txt \
+            --policy examples/dark-psychology/policy.json \
+            --tools "$RUNNER_TEMP/reboot-worker/media-tools.json" --assembly-only
       - name: Production attempt with unchanged review gates
         if: inputs.mode == 'production'
         run: |

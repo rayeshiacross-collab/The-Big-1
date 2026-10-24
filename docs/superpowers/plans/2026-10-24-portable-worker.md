@@ -16,3 +16,10 @@ Constraints: existing production validation stays unchanged; missing full audio/
 Ruling: use a new branch in this task-owned checkout; preserve untracked production-test evidence and all existing files.
 
 Verification: 45 local tests passed; shell syntax and whitespace checks passed. Fresh reviewer identified and fixes addressed fresh-clone refusal, invalid readiness URL, detached gateway cleanup and port collision. First live Linux run exposed Hermes's 64,000-token context minimum; configuration now uses the 262,144-context Qwen3-4B-Instruct-2507 model with a 65,536-token server window. Second Linux run 40077065924 passed live Hermes tool use and exact-script speech synthesis. Full video rendering/perception remains outside this completed runtime slice and is still unfinished.
+
+## Media continuation
+
+- [x] Add an explicit assembly checkpoint to the existing producer, sharing all media validations with full production and never creating verified-delivery or perception claims.
+- [x] Add CPU Manim renderer to the pinned bootstrap and branch assembly execution.
+- [ ] Execute real script-only Hermes assembly, inspect actual media, repair failures and preserve the MP4.
+- [ ] Complete genuine full video/audio perception before any reviewed-complete claim.

@@ -9,6 +9,8 @@ mkdir -p "$root/models"
 command -v uv >/dev/null
 command -v ffmpeg >/dev/null
 command -v ffprobe >/dev/null
+command -v pkg-config >/dev/null
+pkg-config --exists cairo pangocairo || { echo "Install libcairo2-dev libpango1.0-dev pkg-config first" >&2; exit 2; }
 
 source "$repo/scripts/worker_checkout.sh"
 
@@ -16,7 +18,7 @@ worker_checkout https://github.com/NousResearch/hermes-agent.git "$root/hermes-a
 (cd "$root/hermes-agent" && uv sync --python 3.14.8 --frozen --no-dev)
 uv venv --python 3.14.8 --allow-existing "$root/worker-env"
 uv pip install --python "$root/worker-env/bin/python" -r "$repo/requirements.txt" \
-  piper-tts==1.8.0 cmake==4.4.4 ninja==1.13.2
+  piper-tts==1.8.0 cmake==4.4.4 ninja==1.13.2 manim==0.22.0
 export PATH="$root/worker-env/bin:$PATH"
 worker_checkout https://github.com/ggml-org/llama.cpp.git "$root/llama.cpp" "$llama_sha"
 cmake -S "$root/llama.cpp" -B "$root/llama.cpp/build" -G Ninja \
@@ -54,8 +56,9 @@ runtime=dict(hermes_executable=str(r/'hermes-agent/.venv/bin/hermes'),model_serv
 (r/'worker.json').write_text(json.dumps(runtime,indent=2)+'\n')
 tools=dict(hermes_executable=runtime['hermes_executable'],model=runtime['model'],model_base_url='http://127.0.0.1:11434/v1',
  local_tools=[dict(name='piper',executable=runtime['piper'],args=['--model',runtime['voice_path']],capability='speech',license='Piper GPL-3.0; LJ Speech dataset public domain'),
+              dict(name='manim',executable=str(r/'worker-env/bin/manim'),args=['--renderer','cairo'],capability='render',license='MIT'),
               dict(name='ffmpeg',executable='/usr/bin/ffmpeg',args=[],capability='render',license='GPL, installed distribution')],
- timeout_seconds=3600,max_repair_attempts=2)
+ timeout_seconds=3600,max_repair_attempts=1)
 (r/'media-tools.json').write_text(json.dumps(tools,indent=2)+'\n')
 print('Installed runtime manifest:',r/'worker.json')
 print('Full playback review tools are not installed or represented by this bootstrap.')

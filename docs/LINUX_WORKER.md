@@ -2,7 +2,7 @@
 
 The repository now has an installable, bounded Linux execution path. This is a CPU worker runtime, not a provisioned GPU farm or a completed video.
 
-`scripts/bootstrap_cpu_worker.sh /absolute/runtime` installs pinned official Hermes and llama.cpp, checks model/voice downloads against SHA-256 values, and writes `worker.json` plus a media-tool manifest. It requires git, curl, GCC/G++, FFmpeg, ffprobe and uv 0.13.4. The model is Qwen3-4B-Instruct-2507 Q4_K_M (Apache-2.0, Unsloth GGUF conversion of the official Qwen model), served with 65,536 context tokens and quantized KV caches. Hermes requires at least 64,000 tokens; this model's native context is 262,144. The optional Piper voice uses the public-domain LJ Speech dataset. Licenses stay with the installation.
+`scripts/bootstrap_cpu_worker.sh /absolute/runtime` installs pinned official Hermes and llama.cpp, checks model/voice downloads against SHA-256 values, and writes `worker.json` plus a media-tool manifest. It requires git, curl, GCC/G++, FFmpeg, ffprobe, uv 0.13.4 and the Manim build dependencies `libcairo2-dev libpango1.0-dev pkg-config fonts-dejavu-core` (Ubuntu apt packages). The model is Qwen3-4B-Instruct-2507 Q4_K_M (Apache-2.0, Unsloth GGUF conversion of the official Qwen model), served with 65,536 context tokens and quantized KV caches. Hermes requires at least 64,000 tokens; this model's native context is 262,144. The optional Piper voice uses the public-domain LJ Speech dataset. Licenses stay with the installation.
 
 Run a live model-backed tool-use acceptance test:
 
@@ -30,7 +30,7 @@ The bootstrap registers real Piper and FFmpeg executables. It does **not** claim
 
 `Linux worker acceptance` runs on a standard `ubuntu-24.04` public-repository VM. It installs the runtime, verifies a real Hermes tool call and synthesizes the exact test narration. Its artifact retains status, logs and audio for seven days. This VM is ephemeral and has no GPU. It does not register a persistent self-hosted runner, publish anything or expose a public model endpoint.
 
-The manual `production` mode also calls the production command with unchanged gates. It is expected to fail while full-review capabilities remain absent. The automatically triggered branch acceptance uses `runtime` mode only. If the repository becomes private, re-evaluate the account's Actions billing before running this workflow.
+The manual `production` mode also calls the production command with unchanged gates. It is expected to fail while full-review capabilities remain absent. The automatically triggered branch acceptance now runs runtime checks followed by the assembly checkpoint. If the repository becomes private, re-evaluate the account's Actions billing before running this workflow.
 
 ## Verified Linux execution — 2026-10-24
 
@@ -53,3 +53,9 @@ The narration is extracted verbatim from the eight VOICEOVER sections of "Dark P
 Narration SHA-256: `dc079f5e3b113a84e880e8b40190a1d93b16a7b6ef84452706e731f2efcbd05b`.
 
 The source's five-minute scene labels do not define real speech duration. The earlier local Piper synthesis measured 119.698866 seconds and was not perceptually reviewed. The source contains broad psychological claims; preserve the text for this test and keep factual/owner review outstanding before release.
+
+## Assembly checkpoint
+
+`--assembly-only` on the existing production and worker commands runs Hermes authoring and real media validation before the separate playback-review stage. It saves `assembly_report.json` with `ASSEMBLED_NOT_REVIEWED`, never `verified_delivery.json`. All seven assets, exact-source narration/captions/scene coverage, H.264 dimensions/frame rate, audio presence/duration, full decoding, temporal motion and metadata constraints remain required. Default full production still requires actual full audio/video perception and self-QA.
+
+The bootstrap now installs Manim Community 0.22.0 with its CPU Cairo renderer. The branch workflow performs an assembly attempt automatically; manual runtime, assembly and full production modes are also available. A successful assembly is not a completed production test or release approval.

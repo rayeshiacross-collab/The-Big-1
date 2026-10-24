@@ -47,7 +47,7 @@ def check_policy(policy):
     else: raise ProductionError('Unknown voice policy')
 
 @tracked("autonomous_doctor")
-def doctor(tools):
+def doctor(tools, *, assembly_only=False):
     url=endpoint(tools['model_base_url'])
     if not tools.get('model'): raise ProductionError('Local tool-capable model required')
     exe=shutil.which(tools.get('hermes_executable','hermes'))
@@ -59,7 +59,8 @@ def doctor(tools):
         if not all(tool.get(k) for k in ('name','executable','capability','license')) or not shutil.which(tool['executable']): raise ProductionError('Required open local tool missing or unlicensed')
         if 'endpoint' in tool: endpoint(tool['endpoint'])
         capabilities.add(tool['capability'])
-    missing=sorted({'speech','render','video_review','audio_review'}-capabilities)
+    required={'speech','render'} if assembly_only else {'speech','render','video_review','audio_review'}
+    missing=sorted(required-capabilities)
     if missing: raise ProductionError('Missing configured local capabilities: '+', '.join(missing))
     result=subprocess.run([exe,'chat','--help'],capture_output=True,text=True,timeout=30)
     if result.returncode or any(flag not in result.stdout for flag in ('--safe-mode','--query-file','--base-url','--oneshot')): raise ProductionError('Installed Hermes lacks required isolated one-shot CLI options')
@@ -176,7 +177,7 @@ def coverage(segments,duration):
         return end>=duration-.05
     except (TypeError,ValueError): return False
 
-def validate_package(folder,cid,script,policy,tool_registry):
+def validate_assembly(folder,cid,script,policy):
     folder=Path(folder).resolve()
     if (folder/'blocked.json').exists(): raise ProductionError('Hermes reports blocked; inspect blocked.json')
     manifest=json.loads((folder/'production_manifest.json').read_text())
@@ -224,6 +225,19 @@ def validate_package(folder,cid,script,policy,tool_registry):
         if not isinstance(meta.get(field),list) or not meta[field] or any(not isinstance(x,str) or not x.strip() for x in meta[field]): raise ProductionError('YouTube metadata list missing')
     if sum(map(len,meta['tags']))>500 or len(meta['hashtags'])>3: raise ProductionError('Tags/hashtags exceed limits')
     if meta.get('audience') not in ('NOT_MADE_FOR_KIDS','MADE_FOR_KIDS') or type(meta.get('synthetic_media')) is not bool or type(meta.get('paid_promotion')) is not bool: raise ProductionError('Disclosure fields missing')
+    return dict(content_id=cid,status='ASSEMBLED_NOT_REVIEWED',source_sha256=digest,
+                artifact_sha256={p.name:sha(p) for p in files.values()},duration_seconds=duration,
+                temporal_motion_fraction=active,caption_cues=cues,production_video_complete=False,published=False)
+
+
+def validate_package(folder,cid,script,policy,tool_registry):
+    assembly=validate_assembly(folder,cid,script,policy)
+    folder=Path(folder).resolve()
+    manifest=json.loads((folder/'production_manifest.json').read_text())
+    files={k:confined(folder,v) for k,v in manifest['files'].items()}
+    digest=assembly['source_sha256'];duration=assembly['duration_seconds']
+    active=assembly['temporal_motion_fraction'];cues=assembly['caption_cues']
+    audio_duration=float(probe(files['audio'])['format']['duration'])
     qa=json.loads((folder/'self_qa.json').read_text())
     review=require_self_qa(qa,content_id=cid,files=list(files.values()),stage='video');covered=set()
     for e in qa.get('perception_evidence',[]):
@@ -241,7 +255,7 @@ def validate_package(folder,cid,script,policy,tool_registry):
     return dict(content_id=cid,status='READY_FOR_OWNER_INSPECTION',source_sha256=digest,artifact_sha256={p.name:sha(p) for p in files.values()},duration_seconds=duration,temporal_motion_fraction=active,caption_cues=cues,self_qa=review,published=False,limitation='Receipts bind evidence to files; they cannot guarantee reviewer honesty')
 
 @tracked('autonomous_video')
-def produce(content_id,script_path,policy_path,tools_path,*,output=None):
+def produce(content_id,script_path,policy_path,tools_path,*,output=None,assembly_only=False):
     valid_id(content_id);script_path=Path(script_path)
     if script_path.suffix.lower()!='.txt': raise ProductionError('Creative input must be narration TXT, not scene-job JSON')
     script=script_path.read_text(encoding='utf-8')
@@ -254,20 +268,23 @@ def produce(content_id,script_path,policy_path,tools_path,*,output=None):
         status=dict(content_id=content_id,status='PREFLIGHT',source_sha256=hashlib.sha256(script.encode()).hexdigest(),published=False)
         save_json(run/'run_status.json',status)
         try:
-            exe,url=doctor(tools);rounds=tools.get('max_repair_attempts',2)
+            exe,url=doctor(tools,assembly_only=True) if assembly_only else doctor(tools);rounds=tools.get('max_repair_attempts',2)
             if type(rounds)!=int or not 0<=rounds<=3: raise ProductionError('At most three repairs')
             previous=None;defects=[]
             for attempt in range(rounds+1):
                 folder=run/f'attempt_{attempt:02d}';folder.mkdir()
                 (folder/'input_script.txt').write_text(script,encoding='utf-8');save_json(folder/'standing_policy.json',policy)
                 status.update(status='HERMES_PRODUCING' if not attempt else 'HERMES_REPAIRING',attempt=attempt);save_json(run/'run_status.json',status)
-                invoke(exe,url,tools,request_text(content_id,status['source_sha256'],policy,tools,previous,defects),folder)
-                try: report=validate_package(folder,content_id,script,policy,tools.get('local_tools',[]))
+                prompt=request_text(content_id,status['source_sha256'],policy,tools,previous,defects)
+                if assembly_only:
+                    prompt=prompt.replace(INSTRUCTIONS,INSTRUCTIONS.split('After assembly, ACTUALLY')[0]+"ASSEMBLY CHECKPOINT: produce all seven real files. Playback review is a later stage. Do not write self_qa.json or perception receipts, and do not claim reviewed or complete. Missing review tools do not block this assembly stage. Other missing tools still block.\n")
+                invoke(exe,url,tools,prompt,folder)
+                try: report=validate_assembly(folder,content_id,script,policy) if assembly_only else validate_package(folder,content_id,script,policy,tools.get('local_tools',[]))
                 except (ProductionError,QualityGateError,ValueError,KeyError,TypeError,OSError,ZeroDivisionError) as e:
                     defects=[str(e)];save_json(folder/'validation_failure.json',{'defects':defects,'ready':False});previous=folder
                     if (folder/'blocked.json').exists() or attempt==rounds: raise ProductionError(defects[0]) from e
                     continue
-                save_json(folder/'verified_delivery.json',report)
+                save_json(folder/('assembly_report.json' if assembly_only else 'verified_delivery.json'),report)
                 status.update(status=report['status'],delivery_folder=str(folder),attempt=attempt);save_json(run/'run_status.json',status)
                 return status
         except BaseException as e:
@@ -278,7 +295,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--content-id',required=True);p.add_argument('--script',required=True,type=Path)
     p.add_argument('--policy',required=True,type=Path);p.add_argument('--tools',required=True,type=Path);p.add_argument('--output',type=Path)
+    p.add_argument('--assembly-only',action='store_true')
     a=p.parse_args()
-    try: print(json.dumps(produce(a.content_id,a.script,a.policy,a.tools,output=a.output),indent=2))
+    try: print(json.dumps(produce(a.content_id,a.script,a.policy,a.tools,output=a.output,assembly_only=a.assembly_only),indent=2))
     except ProductionError as e: p.exit(2,str(e)+'\n')
 if __name__=='__main__': main()

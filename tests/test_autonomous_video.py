@@ -77,6 +77,30 @@ class MediaTests(unittest.TestCase):
     def setUp(self):
         self.t=tempfile.TemporaryDirectory();self.addCleanup(self.t.cleanup);self.root=Path(self.t.name)
         fixture(self.root)
+    def test_assembly_is_not_reviewed_delivery(self):
+        (self.root/'self_qa.json').unlink()
+        report=av.validate_assembly(self.root,CID,SCRIPT,POLICY)
+        self.assertEqual(report['status'],'ASSEMBLED_NOT_REVIEWED')
+        self.assertFalse(report['production_video_complete'])
+        with self.assertRaises(FileNotFoundError):
+            av.validate_package(self.root,CID,SCRIPT,POLICY,REGISTRY)
+
+    def test_assembly_orchestration_never_creates_verified_delivery(self):
+        cfg=self.root/'assembly_cfg';cfg.mkdir()
+        (cfg/'script.txt').write_text(SCRIPT);dump(cfg/'policy.json',POLICY)
+        dump(cfg/'tools.json',dict(model='fixture',model_base_url='http://127.0.0.1:11434',max_repair_attempts=0))
+        def assemble(exe,url,tools,prompt,folder):
+            self.assertIn('ASSEMBLY CHECKPOINT',prompt)
+            self.assertNotIn('verdict PASS',prompt)
+            fixture(folder)
+            (folder/'self_qa.json').unlink()
+        with patch.dict(os.environ,MACHINE_LEDGER_PATH=str(cfg/'machine.jsonl')),patch.object(av,'doctor',return_value=('fixture','http://127.0.0.1/v1')) as doctor,patch.object(av,'invoke',side_effect=assemble):
+            report=av.produce(CID,cfg/'script.txt',cfg/'policy.json',cfg/'tools.json',output=cfg/'out',assembly_only=True)
+        self.assertTrue(doctor.call_args.kwargs['assembly_only'])
+        self.assertEqual(report['status'],'ASSEMBLED_NOT_REVIEWED')
+        self.assertTrue(list((cfg/'out').rglob('assembly_report.json')))
+        self.assertFalse(list((cfg/'out').rglob('verified_delivery.json')))
+
     def test_real_fixture_package_and_all_artifacts(self):
         r=av.validate_package(self.root,CID,SCRIPT,POLICY,REGISTRY)
         self.assertEqual(r['status'],'READY_FOR_OWNER_INSPECTION');self.assertFalse(r['published'])

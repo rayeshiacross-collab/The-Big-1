@@ -147,7 +147,7 @@ def runtime_check(runtime, url, output):
     require_tool_proof(proof, nonce)
 
 
-def run(runtime_path, output, *, script=None, policy=None, tools_path=None, content_id=None):
+def run(runtime_path, output, *, script=None, policy=None, tools_path=None, content_id=None, assembly_only=False):
     runtime = json.loads(Path(runtime_path).read_text(encoding='utf-8'))
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -179,10 +179,10 @@ def run(runtime_path, output, *, script=None, policy=None, tools_path=None, cont
                 configured = output/'local_tools.json'
                 av.save_json(configured, tools)
                 try:
-                    report['production'] = av.produce(content_id, script, policy, configured, output=output/'production')
+                    report['production'] = av.produce(content_id, script, policy, configured, output=output/'production', assembly_only=assembly_only)
                 finally:
                     stop_production_gateways(runtime['hermes_executable'], output)
-                report.update(status=report['production']['status'], production_video_complete=True)
+                report.update(status=report['production']['status'], production_video_complete=not assembly_only)
         return report
     except Exception as exc:
         report.update(status='BLOCKED_OR_FAILED', error_type=type(exc).__name__, reason=str(exc))
@@ -199,10 +199,11 @@ def main():
     parser.add_argument('--policy', type=Path)
     parser.add_argument('--tools', type=Path)
     parser.add_argument('--content-id')
+    parser.add_argument('--assembly-only', action='store_true')
     args = parser.parse_args()
     try:
         print(json.dumps(run(args.runtime, args.output, script=args.script, policy=args.policy,
-                             tools_path=args.tools, content_id=args.content_id), indent=2))
+                             tools_path=args.tools, content_id=args.content_id, assembly_only=args.assembly_only), indent=2))
     except (WorkerError, av.ProductionError) as exc:
         parser.exit(2, str(exc)+'\n')
 
