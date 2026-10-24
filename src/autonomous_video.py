@@ -79,12 +79,14 @@ def isolated_env(home):
     return {**{k:os.environ[k] for k in ('PATH','SYSTEMROOT','WINDIR','LANG','LC_ALL') if k in os.environ},'HOME':str(home),'USERPROFILE':str(home),'HERMES_HOME':str(home/'.hermes'),'ALLOW_PAID_APIS':'0','PYTHONUNBUFFERED':'1'}
 
 def invoke(exe,url,tools,prompt,folder):
+    folder=Path(folder).resolve()
+    prompt+='\nAbsolute working directory: '+str(folder)+'\nRead the source from this exact absolute path: '+str(folder/'input_script.txt')+'\nUse absolute paths for file tools and this directory as terminal cwd. Do not search outside it. All output files go here.\n'
     request=folder/'request.txt';request.write_text(prompt,encoding='utf-8')
-    argv=[exe,'chat','--safe-mode','--provider','custom','--base-url',url,'--api-key','local-no-secret','--model',tools['model'],'--toolsets','terminal,file','--oneshot','--quiet','--max-turns','80','--query-file',str(request)]
+    argv=[exe,'chat','--in',str(folder),'--safe-mode','--provider','custom','--base-url',url,'--api-key','local-no-secret','--model',tools['model'],'--toolsets','terminal,file','--oneshot','--quiet','--max-turns','80','--query-file',str(request)]
     timeout=tools.get('timeout_seconds',3600)
     if type(timeout)!=int or not 10<=timeout<=14400: raise ProductionError('Invalid worker deadline')
     with (folder/'hermes.log').open('w',encoding='utf-8') as log:
-        r=subprocess.run(argv,cwd=folder,env=isolated_env(folder/'isolated-home'),stdout=log,stderr=subprocess.STDOUT,timeout=timeout)
+        r=subprocess.run(argv,cwd=folder,env={**isolated_env(folder/'isolated-home'),'TERMINAL_CWD':str(folder)},stdout=log,stderr=subprocess.STDOUT,timeout=timeout)
     if r.returncode: raise ProductionError('Hermes process failed; inspect private attempt log')
 
 INSTRUCTIONS='''You are Hermes, the autonomous video producer and your own reviewer.

@@ -68,7 +68,15 @@ jobs:
             --content-id psych-20261024-dark-psychology-test \
             --script examples/dark-psychology/narration.txt \
             --policy examples/dark-psychology/policy.json \
-            --tools "$RUNNER_TEMP/reboot-worker/media-tools.json" --assembly-only
+            --tools "$RUNNER_TEMP/reboot-worker/media-tools.json" --assembly-only &
+          worker_pid=$!
+          while kill -0 "$worker_pid" 2>/dev/null; do
+            date -u
+            find "$RUNNER_TEMP/worker-result/assembly/production" -maxdepth 4 -type f \
+              -not -path '*/isolated-home/*' -printf '%P %s bytes\n' 2>/dev/null || true
+            sleep 30
+          done
+          wait "$worker_pid"
       - name: Production attempt with unchanged review gates
         if: inputs.mode == 'production'
         run: |

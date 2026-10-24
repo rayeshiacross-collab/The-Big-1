@@ -33,6 +33,16 @@ def fixture(folder,static=False):
     dump(folder/'self_qa.json',dict(reviewer='Hermes',content_id=CID,stage='video',reviewed_at='2026-10-22T23:30:00-05:00',verdict='PASS',unresolved_issues=[],watched_full_video=True,listened_full_audio=True,artifact_sha256={v:av.sha(folder/v) for v in mapping.values()},checks={k:dict(status='PASS',evidence='Synthetic test fixture only') for k in VIDEO_CHECKS},perception_evidence=perception))
 
 class ContractTests(unittest.TestCase):
+    def test_gateway_receives_explicit_attempt_directory(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t)
+            with patch.object(av.subprocess,'run',return_value=Mock(returncode=0)) as run:
+                av.invoke('hermes','http://127.0.0.1/v1',dict(model='local'), 'fixture request',root)
+            argv=run.call_args.args[0]
+            self.assertEqual(argv[argv.index('--in')+1],str(root))
+            self.assertEqual(run.call_args.kwargs['env']['TERMINAL_CWD'],str(root))
+            self.assertIn(str(root/'input_script.txt'),(root/'request.txt').read_text())
+
     def test_no_scene_suggestions_in_initial_request(self):
         p=av.request_text(CID,'digest',POLICY,{'local_tools':[]})
         self.assertIn('Creative input is input_script.txt ONLY',p)
