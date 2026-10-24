@@ -1,0 +1,27 @@
+{
+  "brand": "REBOOTv2",
+  "visual_style": "Non-photorealistic illustrated cyberpunk; no recurring host or cyborg",
+  "palette": [
+    "charcoal",
+    "black",
+    "red",
+    "selective neon pink"
+  ],
+  "format": "long",
+  "dimensions": [
+    1920,
+    1080
+  ],
+  "fps": 24,
+  "voice": {
+    "mode": "autonomous_local",
+    "allowed_engines": [
+      "piper",
+      "kokoro",
+      "supertonic3"
+    ]
+  },
+  "language": "en-US",
+  "caption_style": "Readable high contrast, synchronized and inside safe area",
+  "asset_licenses": "Free/open local tools and properly licensed assets only"
+}
