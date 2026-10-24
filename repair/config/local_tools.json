@@ -1,0 +1,38 @@
+{
+  "hermes_executable": "hermes",
+  "model": "llama3.1:8b-instruct-q5_K_M",
+  "model_base_url": "http://127.0.0.1:11434/v1",
+  "timeout_seconds": 3600,
+  "max_repair_attempts": 2,
+  "local_tools": [
+    {
+      "name": "piper-tts",
+      "executable": "piper",
+      "args": ["--model", "REPLACE_WITH_ABSOLUTE_PATH_TO_PIPER_MODEL.onnx", "--output_file"],
+      "capability": "speech",
+      "license": "MIT (Piper)"
+    },
+    {
+      "name": "comfyui-render",
+      "executable": "comfyui-cli",
+      "args": ["--workflow", "REPLACE_WITH_OPEN_WORKFLOW.json"],
+      "capability": "render",
+      "license": "GPL-3.0 / open weights only",
+      "endpoint": "http://127.0.0.1:8188"
+    },
+    {
+      "name": "video-perception-review",
+      "executable": "REPLACE_WITH_VIDEO_REVIEW_WRAPPER",
+      "args": ["--full-playback", "--emit-receipt"],
+      "capability": "video_review",
+      "license": "Open / local only"
+    },
+    {
+      "name": "audio-perception-review",
+      "executable": "REPLACE_WITH_AUDIO_REVIEW_WRAPPER",
+      "args": ["--full-playback", "--emit-receipt"],
+      "capability": "audio_review",
+      "license": "Open / local only"
+    }
+  ]
+}
